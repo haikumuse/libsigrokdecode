@@ -19,8 +19,6 @@
 
 import sigrokdecode as srd
 
-( ANN_RGB, ) = range(1)
-
 class Decoder(srd.Decoder):
     api_version = 3
     id = 'rgb_led_spi'
@@ -32,41 +30,41 @@ class Decoder(srd.Decoder):
     outputs = []
     tags = ['Display']
     annotations = (
-        ('rgb', 'RGB value'),
+        ('rgb', 'RGB values'),
     )
 
     def __init__(self):
         self.reset()
 
     def reset(self):
-        self.ss_cmd = None
+        self.ss_cmd, self.es_cmd = 0, 0
         self.mosi_bytes = []
 
     def start(self):
         self.out_ann = self.register(srd.OUTPUT_ANN)
 
-    def putg(self, ss, es, cls, text):
-        self.put(ss, es, self.out_ann, [cls, text])
+    def putx(self, data):
+        self.put(self.ss_cmd, self.es_cmd, self.out_ann, data)
 
     def decode(self, ss, es, data):
-        ptype = data[0]
+        ptype, mosi, miso = data
 
-        # Grab the payload of three DATA packets. These hold the
-        # RGB values (in this very order).
+        # Only care about data packets.
         if ptype != 'DATA':
             return
-        _, mosi, _ = data
-        if not self.mosi_bytes:
+        self.ss, self.es = ss, es
+
+        if len(self.mosi_bytes) == 0:
             self.ss_cmd = ss
         self.mosi_bytes.append(mosi)
-        if len(self.mosi_bytes) < 3:
+
+        # RGB value == 3 bytes
+        if len(self.mosi_bytes) != 3:
             return
 
-        # Emit annotations. Invalidate accumulated details as soon as
-        # they were processed, to prepare the next iteration.
-        ss_cmd, es_cmd = self.ss_cmd, es
-        self.ss_cmd = None
-        red, green, blue = self.mosi_bytes[:3]
-        self.mosi_bytes.clear()
+        red, green, blue = self.mosi_bytes
         rgb_value = int(red) << 16 | int(green) << 8 | int(blue)
-        self.putg(ss_cmd, es_cmd, ANN_RGB, ['#{:06x}'.format(rgb_value)])
+
+        self.es_cmd = es
+        self.putx([0, ['#%.6x' % rgb_value]])
+        self.mosi_bytes = []

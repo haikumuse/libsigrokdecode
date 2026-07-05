@@ -34,15 +34,15 @@ class Decoder(srd.Decoder):
     outputs = []
     tags = ['Embedded/industrial', 'Lighting']
     channels = (
-        {'id': 'dali', 'name': 'DALI', 'desc': 'DALI data line'},
+        {'id': 'dali', 'name': 'DALI', 'desc': 'DALI data line', 'idn':'dec_dali_chan_dali'},
     )
     options = (
         {'id': 'polarity', 'desc': 'Polarity', 'default': 'active-low',
-            'values': ('active-low', 'active-high')},
+            'values': ('active-low', 'active-high'), 'idn':'dec_dali_opt_polarity'},
     )
     annotations = (
         ('bit', 'Bit'),
-        ('startbit', 'Start bit'),
+        ('startbit', 'Startbit'),
         ('sbit', 'Select bit'),
         ('ybit', 'Individual or group'),
         ('address', 'Address'),
@@ -52,7 +52,7 @@ class Decoder(srd.Decoder):
     )
     annotation_rows = (
         ('bits', 'Bits', (0,)),
-        ('raw-data', 'Raw data', (7,)),
+        ('raw', 'Raw data', (7,)),
         ('fields', 'Fields', (1, 2, 3, 4, 5, 6)),
     )
 
@@ -61,6 +61,7 @@ class Decoder(srd.Decoder):
 
     def reset(self):
         self.samplerate = None
+        self.samplenum = None
         self.edges, self.bits, self.ss_es_bits = [], [], []
         self.state = 'IDLE'
         self.dev_type = None

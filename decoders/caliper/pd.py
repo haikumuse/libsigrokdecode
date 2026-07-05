@@ -37,16 +37,16 @@ class Decoder(srd.Decoder):
     inputs = ['logic']
     outputs = []
     channels = (
-        {'id': 'clk', 'name': 'CLK', 'desc': 'Serial clock line'},
-        {'id': 'data', 'name': 'DATA', 'desc': 'Serial data line'},
+        {'id': 'clk', 'name': 'CLK', 'desc': 'Serial clock line', 'idn':'dec_caliper_chan_clk'},
+        {'id': 'data', 'name': 'DATA', 'desc': 'Serial data line', 'idn':'dec_caliper_chan_data'},
     )
     options = (
         {'id': 'timeout_ms', 'desc': 'Packet timeout in ms, 0 to disable',
-            'default': 10},
+            'default': 10, 'idn':'dec_caliper_opt_timeout_ms'},
         {'id': 'unit', 'desc': 'Convert units', 'default': 'keep',
-            'values': ('keep', 'mm', 'inch')},
+            'values': ('keep', 'mm', 'inch'), 'idn':'dec_caliper_opt_unit'},
         {'id': 'changes', 'desc': 'Changes only', 'default': 'no',
-            'values': ('no', 'yes')},
+            'values': ('no', 'yes'), 'idn':'dec_caliper_opt_changes'},
     )
     tags = ['Analog/digital', 'Sensor']
     annotations = (
@@ -91,7 +91,7 @@ class Decoder(srd.Decoder):
             # after inactivity for a user specified period. Present the
             # number of unprocessed bits to the user for diagnostics.
             clk, data = self.wait(wait_cond)
-            if timeout_ms and not self.matched[0]:
+            if timeout_ms and not self.matched & 0b1 == 0b1:
                 if self.number_bits or self.flags_bits:
                     count = len(self.number_bits) + len(self.flags_bits)
                     self.putg(self.ss, self.samplenum, 1, [

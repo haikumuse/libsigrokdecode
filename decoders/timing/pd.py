@@ -106,7 +106,7 @@ class Decoder(srd.Decoder):
     outputs = []
     tags = ['Clock/timing', 'Util']
     channels = (
-        {'id': 'data', 'name': 'Data', 'desc': 'Data line'},
+        {'id': 'data', 'name': 'Data', 'desc': 'Data line', 'idn':'dec_timing_chan_data'},
     )
     annotations = (
         ('time', 'Time'),
@@ -120,15 +120,15 @@ class Decoder(srd.Decoder):
         ('deltas', 'Deltas', (Ann.DELTA,)),
     )
     options = (
-        { 'id': 'avg_period', 'desc': 'Averaging period', 'default': 100 },
+        { 'id': 'avg_period', 'desc': 'Averaging period', 'default': 100  , 'idn':'dec_timing_opt_avg_period'},
         { 'id': 'edge', 'desc': 'Edges to check',
-          'default': 'any', 'values': ('any', 'rising', 'falling') },
+          'default': 'any', 'values': ('any', 'rising', 'falling')  , 'idn':'dec_timing_opt_edge'},
         { 'id': 'delta', 'desc': 'Show delta from last',
-          'default': 'no', 'values': ('yes', 'no') },
+          'default': 'no', 'values': ('yes', 'no') , 'idn':'dec_timing_opt_delta' },
         { 'id': 'format', 'desc': 'Format of \'time\' annotation',
           'default': 'full', 'values': ('full', 'terse-auto',
           'terse-s', 'terse-ms', 'terse-us', 'terse-ns', 'terse-ps',
-          'samples') },
+          'samples') , 'idn':'dec_timing_opt_format'},
     )
 
     def __init__(self):
@@ -156,11 +156,11 @@ class Decoder(srd.Decoder):
         last_t = None
         while True:
             if edge == 'rising':
-                pin = self.wait({Pin.DATA: 'r'})
+                self.wait({0: 'r'})
             elif edge == 'falling':
-                pin = self.wait({Pin.DATA: 'f'})
+                self.wait({0: 'f'})
             else:
-                pin = self.wait({Pin.DATA: 'e'})
+                self.wait({0: 'e'})
 
             if not ss:
                 ss = self.samplenum

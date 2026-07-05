@@ -2,6 +2,7 @@
 ## This file is part of the libsigrokdecode project.
 ##
 ## Copyright (C) 2016 fenugrec <fenugrec users.sourceforge.net>
+## Copyright (C) 2019 DreamSourceLab <support@dreamsourcelab.com>
 ##
 ## This program is free software; you can redistribute it and/or modify
 ## it under the terms of the GNU General Public License as published by
@@ -35,12 +36,12 @@ class Decoder(srd.Decoder):
     outputs = []
     tags = ['Debug/trace']
     channels = (
-        {'id': 'audck', 'name': 'AUDCK', 'desc': 'AUD clock'},
-        {'id': 'naudsync', 'name': 'nAUDSYNC', 'desc': 'AUD sync'},
-        {'id': 'audata3', 'name': 'AUDATA3', 'desc': 'AUD data line 3'},
-        {'id': 'audata2', 'name': 'AUDATA2', 'desc': 'AUD data line 2'},
-        {'id': 'audata1', 'name': 'AUDATA1', 'desc': 'AUD data line 1'},
-        {'id': 'audata0', 'name': 'AUDATA0', 'desc': 'AUD data line 0'},
+        {'id': 'audck', 'name': 'AUDCK', 'desc': 'AUD clock', 'idn':'dec_aud_chan_audck'},
+        {'id': 'naudsync', 'name': 'nAUDSYNC', 'desc': 'AUD sync', 'idn':'dec_aud_chan_naudsync'},
+        {'id': 'audata3', 'name': 'AUDATA3', 'desc': 'AUD data line 3', 'idn':'dec_aud_chan_audata3'},
+        {'id': 'audata2', 'name': 'AUDATA2', 'desc': 'AUD data line 2', 'idn':'dec_aud_chan_audata2'},
+        {'id': 'audata1', 'name': 'AUDATA1', 'desc': 'AUD data line 1', 'idn':'dec_aud_chan_audata1'},
+        {'id': 'audata0', 'name': 'AUDATA0', 'desc': 'AUD data line 0', 'idn':'dec_aud_chan_audata0'},
     )
     annotations = (
         ('dest', 'Destination address'),
@@ -101,8 +102,6 @@ class Decoder(srd.Decoder):
 
     def decode(self):
         while True:
-            pins = self.wait({0: 'r'})
-            clk = pins[0]
-            sync = pins[1]
-            d = pins[2:]
+            (clk, sync, d3, d2, d1, d0) = self.wait({0: 'r'})
+            d = (d3, d2, d1, d0)
             self.handle_clk_edge(clk, sync, d)

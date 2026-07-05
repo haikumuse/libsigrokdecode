@@ -2,6 +2,7 @@
 ## This file is part of the libsigrokdecode project.
 ##
 ## Copyright (C) 2018 Max Weller
+## Copyright (C) 2019 DreamSourceLab <support@dreamsourcelab.com>
 ##
 ## This program is free software; you can redistribute it and/or modify
 ## it under the terms of the GNU General Public License as published by
@@ -19,9 +20,6 @@
 
 import re
 import sigrokdecode as srd
-from common.srdhelper import SrdIntEnum
-
-Pin = SrdIntEnum.from_str('Pin', 'CLK DATA CE')
 
 ann_cmdbit, ann_databit, ann_cmd, ann_data, ann_warning = range(5)
 
@@ -36,21 +34,21 @@ class Decoder(srd.Decoder):
     outputs = []
     tags = ['IC', 'Memory']
     channels = (
-        {'id': 'clk', 'name': 'CLK', 'desc': 'Clock'},
-        {'id': 'd', 'name': 'DATA', 'desc': 'Data'},
-        {'id': 'ce', 'name': 'CE#', 'desc': 'Chip-enable'},
+        {'id': 'clk', 'name': 'CLK', 'desc': 'Clock', 'idn':'dec_sda2506_chan_clk'},
+        {'id': 'd', 'name': 'DATA', 'desc': 'Data', 'idn':'dec_sda2506_chan_d'},
+        {'id': 'ce', 'name': 'CE#', 'desc': 'Chip-enable', 'idn':'dec_sda2506_chan_ce'},
     )
     annotations = (
         ('cmdbit', 'Command bit'),
         ('databit', 'Data bit'),
         ('cmd', 'Command'),
-        ('databyte', 'Data byte'),
-        ('warning', 'Warning'),
+        ('data', 'Data byte'),
+        ('warnings', 'Human-readable warnings'),
     )
     annotation_rows = (
         ('bits', 'Bits', (ann_cmdbit, ann_databit)),
-        ('data', 'Data', (ann_data,)),
         ('commands', 'Commands', (ann_cmd,)),
+        ('data', 'Data', (ann_data,)),
         ('warnings', 'Warnings', (ann_warning,)),
     )
 
@@ -91,10 +89,10 @@ class Decoder(srd.Decoder):
 
     def decode(self):
         while True:
-            # Wait for CLK edge or CE# edge.
-            clk, d, ce = self.wait([{Pin.CLK: 'e'}, {Pin.CE: 'e'}])
+            # Wait for CLK edge or CE edge.
+            (clk, d, ce) = self.wait([{0: 'e'}, {2: 'e'}])
 
-            if self.matched[0] and ce == 1 and clk == 1:
+            if (self.matched & (0b1 << 0)) and ce == 1 and clk == 1:
                 # Rising clk edge and command mode.
                 bitstart = self.samplenum
                 self.wait({0: 'f'})
@@ -102,11 +100,11 @@ class Decoder(srd.Decoder):
                 if len(self.cmdbits) > 24:
                     self.cmdbits = self.cmdbits[0:24]
                 self.putbit(bitstart, self.samplenum, ann_cmdbit, d)
-            elif self.matched[0] and ce == 0 and clk == 0:
+            elif (self.matched & (0b1 << 0)) and ce == 0 and clk == 0:
                 # Falling clk edge and data mode.
                 bitstart = self.samplenum
-                clk, d, ce = self.wait([{'skip': int(2.5 * (1e6 / self.samplerate))}, {0: 'r'}, {2: 'e'}]) # Wait 25 us for data ready.
-                if self.matched == (True, False, False):
+                (clk, d, ce) = self.wait([{'skip': int(2.5 * (1e6 / self.samplerate))}, {0: 'r'}, {2: 'e'}]) # Wait 25 us for data ready.
+                if (self.matched & (0b1 << 2)) and not (self.matched & 0b011):
                     self.wait([{0: 'r'}, {2: 'e'}])
                 if len(self.databits) == 0:
                     self.datastart = bitstart
@@ -115,7 +113,7 @@ class Decoder(srd.Decoder):
                 if len(self.databits) == 8:
                     self.putdata(self.datastart, self.samplenum)
                     self.databits = []
-            elif self.matched[1] and ce == 0:
+            elif (self.matched & (0b1 << 1)) and ce == 0:
                 # Chip enable edge.
                 try:
                     self.decode_field('addr', 1, 7)

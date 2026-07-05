@@ -17,12 +17,6 @@ the Python PEP-8, which includes the convention of 4 spaces for indentation:
 
   http://www.python.org/dev/peps/pep-0008/
 
-Exceptions:
-
- - All strings should use single quotes ('foo' instead of "foo").
-
- - No double-newlines between methods (or anywhere else).
-
 
 Contributions
 -------------
@@ -56,11 +50,11 @@ Random notes
    memory. Otherwise use standard free(). Never use the wrong function!
 
  - We assume that "small" memory allocations (< 1MB) will always succeed.
-   Thus, it's fine to use g_malloc() or g_malloc0() for allocations of
-   simple/small structs and such (instead of using g_try_malloc()), and
+   Thus, it's fine to use malloc() or malloc() for allocations of
+   simple/small structs and such (instead of using malloc()), and
    there's no need to check the return value.
 
-   Do use g_try_malloc() or g_try_malloc0() for large (>= 1MB) allocations
+   Do use malloc() or malloc() for large (>= 1MB) allocations
    and check the return value.
 
  - You should never print any messages (neither to stdout nor stderr nor
@@ -147,21 +141,8 @@ Protocol decoder guidelines
 
  - Longer, multi-line descriptions should be placed in the protocol
    decoder's __init__.py file as docstring. It can be viewed (for a specific
-   protocol decoder, e.g., UART) via "sigrok-cli -P uart --show", or in various
+   protocol decoder, e.g., UART) via "sigrok-cli -a uart", or in various
    other places in GUIs.
-
- - Input IDs, output IDs, tags, channel IDs, option IDs, annotation class IDs,
-   annotation row IDs, and binary class IDs each must be unique.
-
- - Annotation class IDs must not overlap with annotation row IDs.
-   For example, you cannot have an annotation row named "foo" if you already
-   have an annotation class named "foo". This avoids confusion for users
-   and simplifies e.g. command-line usage of decoders.
-
- - Annotation class IDs should generally be singular, annotation row IDs
-   should generally be plural. Example: UART annotation classes could be
-   named "stop-bit" or "parity-bit" (singular), the annotation row containing
-   these annotation classes could be named "bits" (plural).
 
  - Generally use strings for states (of the PD state machine), not integers.
    This avoids having to keep a list of state definitions at the top of file.
@@ -207,7 +188,7 @@ Protocol decoder guidelines
    Common tags:
 
    - Analog/digital: Decoders related A/D conversion, e.g. ADCs and DACs.
-   - Audio: Decoders related to audio protocols, e.g. I²S, S/PDIF.
+   - Audio: Decoders related to audio protocols, e.g. I2S, S/PDIF.
    - Automotive: Decoders related to automotive protocols, e.g. CAN, FlexRay.
    - Clock/timing: Decoders related to time keeping, timing, and clocks/RTCs.
    - Debug/trace: Decoders related to microcontroller/CPU debugging, tracing,

@@ -2,6 +2,7 @@
 ## This file is part of the libsigrokdecode project.
 ##
 ## Copyright (C) 2017 Karl Palsson <karlp@etactica.com>
+## Copyright (C) 2022 DreamSourceLab <support@dreamsourcelab.com>
 ##
 ## Permission is hereby granted, free of charge, to any person obtaining a copy
 ## of this software and associated documentation files (the "Software"), to deal
@@ -21,6 +22,10 @@
 ## OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 ## SOFTWARE.
 
+##
+## 2022/07/05 DreamSourceLab : Support for different data output formats
+##
+
 import math
 import sigrokdecode as srd
 from .lists import *
@@ -36,13 +41,13 @@ class Decoder(srd.Decoder):
     outputs = []
     tags = ['Analog/digital', 'IC', 'Sensor']
     annotations = (
-        ('read', 'Register read'),
-        ('write', 'Register write'),
-        ('warning', 'Warning'),
+        ('read', 'Register read commands'),
+        ('write', 'Register write commands'),
+        ('warning', 'Warnings'),
     )
     annotation_rows = (
-        ('reads', 'Reads', (0,)),
-        ('writes', 'Writes', (1,)),
+        ('read', 'Read', (0,)),
+        ('write', 'Write', (1,)),
         ('warnings', 'Warnings', (2,)),
     )
 
@@ -124,8 +129,8 @@ class Decoder(srd.Decoder):
             vali = self.miso_bytes[1]
 
         if write:
-            self.putx([1, ['%s: %#x' % (rblob[0], valo)]])
+            self.putx([1, ['%s: {$}' % rblob[0], '@%02X' % valo]])
         else:
-            self.putx([0, ['%s: %#x' % (rblob[0], vali)]])
+            self.putx([0, ['%s: {$}' % rblob[0], '@%02X' % valo]])
 
         self.reset_data()

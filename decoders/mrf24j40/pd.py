@@ -2,6 +2,7 @@
 ## This file is part of the libsigrokdecode project.
 ##
 ## Copyright (C) 2015 Karl Palsson <karlp@tweak.net.au>
+## Copyright (C) 2022 DreamSourceLab <support@dreamsourcelab.com>
 ##
 ## This program is free software; you can redistribute it and/or modify
 ## it under the terms of the GNU General Public License as published by
@@ -15,6 +16,10 @@
 ##
 ## You should have received a copy of the GNU General Public License
 ## along with this program; if not, see <http://www.gnu.org/licenses/>.
+##
+
+##
+## 2022/07/05 DreamSourceLab : Support for different data output formats
 ##
 
 import sigrokdecode as srd
@@ -100,9 +105,9 @@ class Decoder(srd.Decoder):
                 [idx, ['%s frame: %s' % (xmitdir, frame)]])
             self.framecache[rxtx] = []
         if write:
-            self.putx([1, ['%s: %#x' % (reg_desc, self.mosi_bytes[1])]])
+            self.putx([1, ['%s: {$}' % (reg_desc, '@%02X' % self.mosi_bytes[1])]])
         else:
-            self.putx([0, ['%s: %#x' % (reg_desc, self.miso_bytes[1])]])
+            self.putx([0, ['%s: {$}' % reg_desc, '@%02X' % self.miso_bytes[1]]])
             numretries = (self.miso_bytes[1] & 0xc0) >> 6
             if reg_desc == 'TXSTAT' and numretries > 0:
                 txfail = 1 if ((self.miso_bytes[1] & (1 << 0)) != 0) else 0
@@ -136,9 +141,9 @@ class Decoder(srd.Decoder):
             reg_desc = 'RX:%#x' % reg
 
         if write:
-            self.putx([3, ['%s: %#x' % (reg_desc, self.mosi_bytes[2])]])
+            self.putx([3, ['%s: {$}' % reg_desc, '@%02X' % self.mosi_bytes[2]]])
         else:
-            self.putx([2, ['%s: %#x' % (reg_desc, self.miso_bytes[2])]])
+            self.putx([2, ['%s: {$}' % reg_desc, '@%02X' % self.miso_bytes[2]]])
 
         for rxtx in (RX, TX):
             if rxtx == RX and reg_desc[:3] != 'RX:':

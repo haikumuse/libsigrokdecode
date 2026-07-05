@@ -45,7 +45,7 @@ class Decoder(srd.Decoder):
     annotation_rows = (
         ('bits', 'Bits', (0,)),
         ('fields', 'Fields', (1, 3, 4)),
-        ('l2vals', 'Level 2', (2,)),
+        ('l2', 'Level 2', (2,)),
     )
     binary = (
         ('data-hex', 'Hex data'),
@@ -53,7 +53,7 @@ class Decoder(srd.Decoder):
     options = (
         {'id': 'unknown', 'desc': 'Unknown type is', 'default': 'Unknown',
          'values': ('Unknown', 'Temp', 'Temp_Hum', 'Temp_Hum1', 'Temp_Hum_Baro',
-                    'Temp_Hum_Baro1', 'UV', 'UV1', 'Wind', 'Rain', 'Rain1')},
+                    'Temp_Hum_Baro1', 'UV', 'UV1', 'Wind', 'Rain', 'Rain1'), 'idn':'dec_ook_oregon_opt_unknown'},
     )
 
     def __init__(self):

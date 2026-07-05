@@ -2,6 +2,7 @@
 ## This file is part of the libsigrokdecode project.
 ##
 ## Copyright (C) 2016 Daniel Schulte <trilader@schroedingers-bit.net>
+## Copyright (C) 2019 DreamSourceLab <support@dreamsourcelab.com>
 ##
 ## This program is free software; you can redistribute it and/or modify
 ## it under the terms of the GNU General Public License as published by
@@ -21,9 +22,16 @@ import sigrokdecode as srd
 from collections import namedtuple
 
 class Ann:
-    BIT, START, STOP, PARITY_OK, PARITY_ERR, DATA, WORD = range(7)
+    BIT, HSTART, DSTART, STOP, PARITY_OK, PARITY_ERR, DATA, WORD, ACK = range(9)
 
 Bit = namedtuple('Bit', 'val ss es')
+
+class Ps2Packet:
+    def __init__(self, val, host=False, pok=False, ack=False):
+        self.val  = val
+        self.host = host
+        self.pok  = pok
+        self.ack  = ack
 
 class Decoder(srd.Decoder):
     api_version = 3
@@ -33,24 +41,32 @@ class Decoder(srd.Decoder):
     desc = 'PS/2 keyboard/mouse interface.'
     license = 'gplv2+'
     inputs = ['logic']
-    outputs = []
+    outputs = ['ps2']
     tags = ['PC']
     channels = (
-        {'id': 'clk', 'name': 'Clock', 'desc': 'Clock line'},
-        {'id': 'data', 'name': 'Data', 'desc': 'Data line'},
+        {'id': 'clk', 'type': 0, 'name': 'Clock', 'desc': 'Clock line', 'idn':'dec_ps2_chan_clk'},
+        {'id': 'data', 'type': 107, 'name': 'Data', 'desc': 'Data line', 'idn':'dec_ps2_chan_data'},
+    )
+    options = (
+        {'id': 'HtoD_Clock', 'desc': 'HtoD_Clock',
+            'default': 'rise', 'values': ('rise', 'fall'), 'idn':'dec_ps2_opt_HtoD_Clock'},
+        {'id': 'DtoH_Clock', 'desc': 'DtoH_Clock',
+            'default': 'fall', 'values': ('fall', 'rise'), 'idn':'dec_ps2_opt_DtoH_Clock'},
     )
     annotations = (
-        ('bit', 'Bit'),
-        ('start-bit', 'Start bit'),
-        ('stop-bit', 'Stop bit'),
-        ('parity-ok', 'Parity OK bit'),
-        ('parity-err', 'Parity error bit'),
-        ('data-bit', 'Data bit'),
-        ('word', 'Word'),
+        ('207', 'bit', 'Bit'),
+        ('109', 'HSTART', 'HSTART'),
+        ('50', 'DSTART', 'DSTART'),
+        ('1000', 'stop-bit', 'Stop bit'),
+        ('7', 'parity-ok', 'Parity OK bit'),
+        ('1000', 'parity-err', 'Parity error bit'),
+        ('40', 'data-bit', 'Data bit'),
+        ('65', 'word', 'Word'),
+        ('75', 'ACK', 'ACK'),
     )
     annotation_rows = (
         ('bits', 'Bits', (0,)),
-        ('fields', 'Fields', (1, 2, 3, 4, 5, 6)),
+        ('fields', 'Fields', (1, 2, 3, 4, 5, 6, 7, 8)),
     )
 
     def __init__(self):
@@ -58,11 +74,17 @@ class Decoder(srd.Decoder):
 
     def reset(self):
         self.bits = []
+        self.samplenum = 0
         self.bitcount = 0
+        self.state = 'NULL'
+        self.ss = self.es = 0
+        self.HtoDss = 0
 
     def start(self):
         self.out_ann = self.register(srd.OUTPUT_ANN)
-
+        self.out_python = self.register(srd.OUTPUT_PYTHON)
+        self.HtoD = 1 if self.options['HtoD_Clock'] == 'rise' else 0
+        self.DtoH = 1 if self.options['DtoH_Clock'] == 'fall' else 0
     def putb(self, bit, ann_idx):
         b = self.bits[bit]
         self.put(b.ss, b.es, self.out_ann, [ann_idx, [str(b.val)]])
@@ -73,7 +95,9 @@ class Decoder(srd.Decoder):
     def handle_bits(self, datapin):
         # Ignore non start condition bits (useful during keyboard init).
         if self.bitcount == 0 and datapin == 1:
-            return
+            self.state = 'HtoD'
+            (clock_pin, datapin) = self.wait({0: 'r'})
+        
 
         # Store individual bits and their start/end samplenumbers.
         self.bits.append(Bit(datapin, self.samplenum, self.samplenum))
@@ -103,7 +127,10 @@ class Decoder(srd.Decoder):
         # Emit annotations.
         for i in range(11):
             self.putb(i, Ann.BIT)
-        self.putx(0, [Ann.START, ['Start bit', 'Start', 'S']])
+        if self.state == 'HtoD':
+            self.putx(0, [Ann.HSTART, ['Host Start', 'HStart', 'HS']])
+        if self.state == 'DtoH':
+            self.putx(0, [Ann.DSTART, ['Device Start', 'Device', 'DS']])
         self.put(self.bits[1].ss, self.bits[8].es, self.out_ann, [Ann.WORD,
                  ['Data: %02x' % word, 'D: %02x' % word, '%02x' % word]])
         if parity_ok:
@@ -112,15 +139,68 @@ class Decoder(srd.Decoder):
             self.putx(9, [Ann.PARITY_ERR, ['Parity error', 'Par err', 'PE']])
         self.putx(10, [Ann.STOP, ['Stop bit', 'Stop', 'St', 'T']])
 
+        # Send Python output for stacked decoders (ps2_keyboard, ps2_mouse).
+        host = (self.state == 'HtoD')
+        pkt = Ps2Packet(val=word, host=host, pok=parity_ok, ack=False)
+        self.put(self.bits[0].ss, self.bits[10].es, self.out_python, pkt)
+
         self.bits, self.bitcount = [], 0
+        self.state == 'NULL'
 
     def decode(self):
         while True:
-            # Sample data bits on the falling clock edge (assume the device
-            # is the transmitter). Expect the data byte transmission to end
-            # at the rising clock edge. Cope with the absence of host activity.
-            _, data_pin = self.wait({0: 'f'})
-            self.handle_bits(data_pin)
-            if self.bitcount == 1 + 8 + 1 + 1:
-                _, data_pin = self.wait({0: 'r'})
+            # Sample data bits on falling clock edge.
+            if self.bitcount == 0:
+                if self.HtoDss :
+                    self.state = 'HtoD'
+                    (clock_pin, data_pin) = self.wait({0: 'r',1: 'l'})
+                    self.handle_bits(data_pin)
+                    (clock_pin, data_pin) = self.wait({0: 'f'})
+                else:
+                    (clock_pin, data_pin) = self.wait([{0: 'f',1: 'r'},{0: 'f',1: 'f'},{0: 'f',1: 'h'},{0: 'f',1: 'l'}])
+                    if (self.matched & (0b1 << 0)):
+                        continue
+                    if (self.matched & (0b1 << 1)):
+                        self.state = 'HtoD'
+                        (clock_pin, data_pin) = self.wait({0: 'r',1: 'l'})
+                        self.handle_bits(data_pin)
+                        (clock_pin, data_pin) = self.wait({0: 'f'})
+                    if (self.matched & (0b1 << 2)):
+                        self.state = 'HtoD'
+                        (clock_pin, data_pin) = self.wait({0: 'r',1: 'l'})
+                        self.handle_bits(data_pin)
+                        (clock_pin, data_pin) = self.wait({0: 'f'})
+                    if (self.matched & (0b1 << 3)):
+                        self.state = 'DtoH'
+                        self.handle_bits(data_pin)
+            if self.state == 'HtoD':
+                if self.HtoD :
+                    (clock_pin, data_pin) = self.wait({0: 'r'})
+                else:
+                    (clock_pin, data_pin) = self.wait({0: 'f'})
                 self.handle_bits(data_pin)
+                if (self.bitcount == 10):
+                    (clock_pin, data_pin) = self.wait({0: 'r'})
+                    self.handle_bits(data_pin)
+                if (self.bitcount == 11):
+                    (clock_pin, data_pin) = self.wait({0: 'f'})
+                    self.handle_bits(data_pin)
+                    self.ss = self.samplenum
+                    (clock_pin, data_pin) = self.wait({0: 'r'})
+                    self.es = self.samplenum
+                    self.put(self.ss,self.es,self.out_ann,[Ann.ACK, ['ACK', 'ACK', 'ACK', 'A']])
+                    self.HtoDss = 0
+            if self.state == 'DtoH':
+                if self.DtoH :
+                    (clock_pin, data_pin) = self.wait({0: 'f'})
+                else:
+                    (clock_pin, data_pin) = self.wait({0: 'r'})
+                self.handle_bits(data_pin)
+                if (self.bitcount == 11):
+                    (clock_pin, data_pin) = self.wait([{1: 'f'},{0: 'r'}])
+                    if (self.matched & (0b1 << 0)):
+                        self.handle_bits(data_pin)
+                        self.HtoDss = 1
+                    if (self.matched & (0b1 << 1)):
+                        self.handle_bits(data_pin)
+                        self.HtoDss = 0

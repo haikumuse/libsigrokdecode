@@ -35,11 +35,11 @@ class Decoder(srd.Decoder):
     outputs = []
     tags = ['Clock/timing']
     channels = (
-        {'id': 'data', 'name': 'DATA', 'desc': 'DATA line'},
+        {'id': 'data', 'name': 'DATA', 'desc': 'DATA line', 'idn':'dec_dcf77_chan_data'},
     )
     annotations = (
         ('start-of-minute', 'Start of minute'),
-        ('special-bit', 'Special bit (civil warnings, weather forecast)'),
+        ('special-bits', 'Special bits (civil warnings, weather forecast)'),
         ('call-bit', 'Call bit'),
         ('summer-time', 'Summer time announcement'),
         ('cest', 'CEST bit'),
@@ -55,9 +55,9 @@ class Decoder(srd.Decoder):
         ('month', 'Month'),
         ('year', 'Year'),
         ('date-parity', 'Date parity bit'),
-        ('raw-bit', 'Raw bit'),
-        ('unknown-bit', 'Unknown bit'),
-        ('warning', 'Warning'),
+        ('raw-bits', 'Raw bits'),
+        ('unknown-bits', 'Unknown bits'),
+        ('warnings', 'Human-readable warnings'),
     )
     annotation_rows = (
         ('bits', 'Bits', (17, 18)),

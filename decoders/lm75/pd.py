@@ -50,16 +50,16 @@ class Decoder(srd.Decoder):
     tags = ['Sensor']
     options = (
         {'id': 'sensor', 'desc': 'Sensor type', 'default': 'lm75',
-            'values': ('lm75',)},
+            'values': ('lm75',), 'idn':'dec_lm75_opt_sensor'},
         {'id': 'resolution', 'desc': 'Resolution (bits)', 'default': 9,
-            'values': (9, 10, 11, 12)},
+            'values': (9, 10, 11, 12), 'idn':'dec_lm75_opt_resolution'},
     )
     annotations = (
-        ('celsius', 'Temperature / °C'),
-        ('kelvin', 'Temperature / Kelvin'),
-        ('text-verbose', 'Text (verbose)'),
-        ('text', 'Text'),
-        ('warning', 'Warning'),
+        ('celsius', 'Temperature in degrees Celsius'),
+        ('kelvin', 'Temperature in Kelvin'),
+        ('text-verbose', 'Human-readable text (verbose)'),
+        ('text', 'Human-readable text'),
+        ('warnings', 'Human-readable warnings'),
     )
 
     def __init__(self):

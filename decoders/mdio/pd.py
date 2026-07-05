@@ -2,6 +2,7 @@
 ## This file is part of the libsigrokdecode project.
 ##
 ## Copyright (C) 2016 Elias Oenal <sigrok@eliasoenal.com>
+## Copyright (C) 2019 DreamSourceLab <support@dreamsourcelab.com>
 ## All rights reserved.
 ##
 ## Redistribution and use in source and binary forms, with or without
@@ -39,12 +40,14 @@ class Decoder(srd.Decoder):
     outputs = ['mdio']
     tags = ['Networking']
     channels = (
-        {'id': 'mdc', 'name': 'MDC', 'desc': 'Clock'},
-        {'id': 'mdio', 'name': 'MDIO', 'desc': 'Data'},
+        {'id': 'mdc', 'name': 'MDC', 'desc': 'Clock', 'idn':'dec_mdio_chan_mdc'},
+        {'id': 'mdio', 'name': 'MDIO', 'desc': 'Data', 'idn':'dec_mdio_chan_mdio'},
     )
     options = (
         {'id': 'show_debug_bits', 'desc': 'Show debug bits',
-            'default': 'no', 'values': ('yes', 'no')},
+            'default': 'no', 'values': ('yes', 'no'), 'idn':'dec_mdio_opt_show_debug_bits'},
+        {'id': 'read_edge', 'desc': 'read edge',
+            'default': 'falling', 'values': ('rising', 'falling'), 'idn':'dec_mdio_opt_read_edge'},
     )
     annotations = (
         ('bit-val', 'Bit value'),
@@ -55,11 +58,11 @@ class Decoder(srd.Decoder):
         ('decode', 'Decode'),
     )
     annotation_rows = (
-        ('bit-vals', 'Bit values', (0,)),
-        ('bit-nums', 'Bit numbers', (1,)),
-        ('frames', 'Frames', (2, 3)),
-        ('frame-errors', 'Frame errors', (4,)),
-        ('decode-vals', 'Decode', (5,)),
+        ('bit-val', 'Bit value', (0,)),
+        ('bit-num', 'Bit number', (1,)),
+        ('frame', 'Frame', (2, 3)),
+        ('frame-error', 'Frame error', (4,)),
+        ('decode', 'Decode', (5,)),
     )
 
     def __init__(self):
@@ -67,7 +70,8 @@ class Decoder(srd.Decoder):
 
     def reset(self):
         self.illegal_bus = 0
-        self.clause45_addr = -1 # Clause 45 is context sensitive.
+        self.samplenum = -1
+        self.clause45_addr = -1 # Clause 45 is context sensitive.       
         self.reset_decoder_state()
 
     def start(self):
@@ -139,6 +143,7 @@ class Decoder(srd.Decoder):
         self.data = -1
         self.data_bits = 16
         self.state = 'PRE'
+        self.is_read = True 
 
     def state_PRE(self, mdio):
         if self.illegal_bus:
@@ -223,16 +228,22 @@ class Decoder(srd.Decoder):
                     op = ['OP: ADDR', 'OP: A']
                 elif self.opcode == 1:
                     op = ['OP: WRITE', 'OP: W']
+                    self.is_read = False
                 elif self.opcode == 2:
                     op = ['OP: READINC', 'OP: RI']
+                    self.is_read = True              
                 elif self.opcode == 3:
                     op = ['OP: READ', 'OP: R']
+                    self.is_read = True
             else:
                 op = ['OP: READ', 'OP: R'] if self.opcode else ['OP: WRITE', 'OP: W']
+                self.is_read = True if self.opcode else False
+
             self.putff([2, op + ['OP', 'O']])
             if self.op_invalid:
                 self.putff([4, ['OP %s' % self.op_invalid, 'OP', 'O']])
             self.ss_frame_field = self.samplenum
+
         self.portad_bits -= 1
         self.portad |= mdio << self.portad_bits
         if not self.portad_bits:
@@ -319,7 +330,16 @@ class Decoder(srd.Decoder):
         self.process_state(self.state, mdio)
 
     def decode(self):
+        find_flags = [{0: 'r'}, {0: 'f'}]
+        flag_dex = 0 
+        read_edge = self.options["read_edge"][0] 
+
         while True:
             # Process pin state upon rising MDC edge.
-            pins = self.wait({0: 'r'})
-            self.handle_bit(pins[1])
+            (mdc, mdio) = self.wait(find_flags[flag_dex])
+            self.handle_bit(mdio)
+        
+            if self.state == 'DATA' and self.is_read and read_edge == 'f':
+                flag_dex = 1
+            else:
+                flag_dex = 0

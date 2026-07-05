@@ -2,6 +2,7 @@
 ## This file is part of the libsigrokdecode project.
 ##
 ## Copyright (C) 2015 Bart de Waal <bart@waalamo.com>
+## Copyright (C) 2019 DreamSourceLab <support@dreamsourcelab.com>
 ##
 ## This program is free software; you can redistribute it and/or modify
 ## it under the terms of the GNU General Public License as published by
@@ -845,10 +846,10 @@ class Decoder(srd.Decoder):
     )
     options = (
         {'id': 'scchannel', 'desc': 'Server -> client channel',
-            'default': rxtx_channels[0], 'values': rxtx_channels},
+            'default': rxtx_channels[0], 'values': rxtx_channels, 'idn':'dec_modbus_opt_scchannel'},
         {'id': 'cschannel', 'desc': 'Client -> server channel',
-            'default': rxtx_channels[1], 'values': rxtx_channels},
-        {'id': 'framegap', 'desc': 'Inter-frame bit gap', 'default': 28},
+            'default': rxtx_channels[1], 'values': rxtx_channels, 'idn':'dec_modbus_opt_cschannel'},
+        {'id': 'framegap', 'desc': 'Inter-frame bit gap', 'default': 28, 'idn':'dec_modbus_opt_framegap'},
     )
 
     def __init__(self):

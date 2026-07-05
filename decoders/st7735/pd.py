@@ -75,10 +75,10 @@ class Decoder(srd.Decoder):
     outputs = []
     tags = ['Display', 'IC']
     channels = (
-        {'id': 'cs', 'name': 'CS#', 'desc': 'Chip-select'},
-        {'id': 'clk', 'name': 'CLK', 'desc': 'Clock'},
-        {'id': 'mosi', 'name': 'MOSI', 'desc': 'Master out, slave in'},
-        {'id': 'dc', 'name': 'DC', 'desc': 'Data or command'}
+        {'id': 'cs', 'name': 'CS#', 'desc': 'Chip-select', 'idn':'dec_st7735_chan_cs'},
+        {'id': 'clk', 'name': 'CLK', 'desc': 'Clock', 'idn':'dec_st7735_chan_clk'},
+        {'id': 'mosi', 'name': 'MOSI', 'desc': 'Master out, slave in', 'idn':'dec_st7735_chan_mosi'},
+        {'id': 'dc', 'name': 'DC', 'desc': 'Data or command', 'idn':'dec_st7735_chan_dc'}
     )
     annotations = (
         ('bit', 'Bit'),
@@ -89,7 +89,7 @@ class Decoder(srd.Decoder):
     annotation_rows = (
         ('bits', 'Bits', (Ann.BITS,)),
         ('fields', 'Fields', (Ann.CMD, Ann.DATA)),
-        ('descriptions', 'Descriptions', (Ann.DESC,)),
+        ('description', 'Description', (Ann.DESC,)),
     )
 
     def __init__(self):
@@ -108,7 +108,7 @@ class Decoder(srd.Decoder):
     def put_desc(self, ss, es, cmd, data):
         if cmd == -1:
             return
-        if cmd in META:
+        if META[cmd]:
             self.put(ss, es, self.out_ann, [Ann.DESC,
                 ['%s: %s' % (META[cmd]['name'].strip(), META[cmd]['desc'])]])
         else:

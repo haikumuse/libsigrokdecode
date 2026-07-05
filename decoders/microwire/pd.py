@@ -2,6 +2,7 @@
 ## This file is part of the libsigrokdecode project.
 ##
 ## Copyright (C) 2017 Kevin Redon <kingkevin@cuvoodoo.info>
+## Copyright (C) 2019 DreamSourceLab <support@dreamsourcelab.com>
 ##
 ## This program is free software; you can redistribute it and/or modify
 ## it under the terms of the GNU General Public License as published by
@@ -52,10 +53,10 @@ class Decoder(srd.Decoder):
     outputs = ['microwire']
     tags = ['Embedded/industrial']
     channels = (
-        {'id': 'cs', 'name': 'CS', 'desc': 'Chip select'},
-        {'id': 'sk', 'name': 'SK', 'desc': 'Clock'},
-        {'id': 'si', 'name': 'SI', 'desc': 'Slave in'},
-        {'id': 'so', 'name': 'SO', 'desc': 'Slave out'},
+        {'id': 'cs', 'name': 'CS', 'desc': 'Chip select', 'idn':'dec_microwire_chan_cs'},
+        {'id': 'sk', 'name': 'SK', 'desc': 'Clock', 'idn':'dec_microwire_chan_sk'},
+        {'id': 'si', 'name': 'SI', 'desc': 'Slave in', 'idn':'dec_microwire_chan_si'},
+        {'id': 'so', 'name': 'SO', 'desc': 'Slave out', 'idn':'dec_microwire_chan_so'},
     )
     annotations = (
         ('start-bit', 'Start bit'),
@@ -85,7 +86,7 @@ class Decoder(srd.Decoder):
     def decode(self):
         while True:
             # Wait for slave to be selected on rising CS.
-            cs, sk, si, so = self.wait({0: 'r'})
+            (cs, sk, si, so) = self.wait({0: 'r'})
             if sk:
                 self.put(self.samplenum, self.samplenum, self.out_ann,
                      [5, ['Clock should be low on start',
@@ -99,7 +100,7 @@ class Decoder(srd.Decoder):
                 # Save change.
                 packet.append(Packet(self.samplenum, self.matched, cs, sk, si, so))
                 edge = 'r' if sk == 0 else 'f'
-                cs, sk, si, so = self.wait([{0: 'l'}, {1: edge}, {3: 'e'}])
+                (cs, sk, si, so) = self.wait([{0: 'l'}, {1: edge}, {3: 'e'}])
             # Save last change.
             packet.append(Packet(self.samplenum, self.matched, cs, sk, si, so))
 
@@ -108,7 +109,7 @@ class Decoder(srd.Decoder):
             status_check = True
             for change in packet:
                 # Get first clock rising edge.
-                if len(change.matched) > 1 and change.matched[1] and change.sk:
+                if (change.matched & (0b1 << 1)) and change.sk:
                     if change.si:
                         status_check = False
                     break
@@ -122,7 +123,7 @@ class Decoder(srd.Decoder):
                 bit_so = packet[0].so
                 # Check for SO edges.
                 for change in packet:
-                    if len(change.matched) > 2 and change.matched[2]:
+                    if (change.matched & (0b1 << 2)):
                         if bit_so == 0 and change.so:
                             # Rising edge Busy -> Ready.
                             self.put(start_samplenum, change.samplenum,
@@ -147,7 +148,7 @@ class Decoder(srd.Decoder):
                 start_bit = True # Start bit incoming (first bit).
                 pydata = [] # Python output data.
                 for change in packet:
-                    if len(change.matched) > 1 and change.matched[1]:
+                    if (change.matched & (0b1 << 1)):
                         # Clock edge.
                         if change.sk: # Rising clock edge.
                             if bit_start > 0: # Bit completed.
@@ -179,7 +180,7 @@ class Decoder(srd.Decoder):
                             bit_si = change.si
                         else: # Falling clock edge.
                             bit_so = change.so
-                    elif change.matched[0] and \
+                    elif (change.matched & (0b1 << 0)) and \
                                     change.cs == 0 and change.sk == 0:
                         # End of packet.
                         self.put(bit_start, change.samplenum, self.out_ann,

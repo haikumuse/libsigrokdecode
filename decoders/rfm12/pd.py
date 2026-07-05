@@ -2,6 +2,7 @@
 ## This file is part of the libsigrokdecode project.
 ##
 ## Copyright (C) 2014 Sławek Piotrowski <sentinel@atteo.org>
+## Copyright (C) 2022 DreamSourceLab <support@dreamsourcelab.com>
 ##
 ## This program is free software; you can redistribute it and/or modify
 ## it under the terms of the GNU General Public License as published by
@@ -15,6 +16,10 @@
 ##
 ## You should have received a copy of the GNU General Public License
 ## along with this program; if not, see <http://www.gnu.org/licenses/>.
+##
+
+##
+## 2022/07/05 DreamSourceLab : Support for different data output formats
 ##
 
 import sigrokdecode as srd
@@ -31,16 +36,16 @@ class Decoder(srd.Decoder):
     tags = ['Wireless/RF']
     annotations = (
         ('cmd', 'Command'),
-        ('param', 'Command parameter'),
-        ('disabled', 'Disabled bit'),
-        ('return', 'Returned value'),
-        ('disabled_return', 'Disabled returned value'),
+        ('params', 'Command parameters'),
+        ('disabled', 'Disabled bits'),
+        ('return', 'Returned values'),
+        ('disabled_return', 'Disabled returned values'),
         ('interpretation', 'Interpretation'),
     )
     annotation_rows = (
         ('commands', 'Commands', (0, 1, 2)),
-        ('returns', 'Returns', (3, 4)),
-        ('interpretations', 'Interpretations', (5,)),
+        ('return', 'Return', (3, 4)),
+        ('interpretation', 'Interpretation', (5,)),
     )
 
     def __init__(self):
@@ -251,11 +256,11 @@ class Decoder(srd.Decoder):
         if self.last_fifo_and_reset & 0x08:
             self.putx(0, 8, ['Pattern: 0x2D%02X' % pattern])
         else:
-            self.putx(0, 8, ['Pattern: %02X' % pattern])
+            self.putx(0, 8, ['Pattern: {$}', '@%02X' % pattern])
 
     def handle_fifo_read_cmd(self, cmd, ret):
         self.putx(0, 8, ['FIFO read command', 'FIFO read'])
-        self.putx(3, 8, ['Data: %02X' % ret[1]])
+        self.putx(3, 8, ['Data: {$}', '@%02X' % ret[1]])
 
     def handle_afc_cmd(self, cmd, ret):
         self.putx(0, 8, ['AFC command'])

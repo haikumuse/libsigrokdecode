@@ -41,7 +41,6 @@ class LinFsm:
 
     def reset(self):
         self.state = LinFsm.State.WaitForBreak
-        self.uart_idle_count = 0
 
     def __init__(self):
         a = dict()
@@ -54,7 +53,6 @@ class LinFsm:
         self.allowed_state = a
 
         self.state = None
-        self.uart_idle_count = 0
         self.reset()
 
 class Decoder(srd.Decoder):
@@ -68,17 +66,17 @@ class Decoder(srd.Decoder):
     outputs = []
     tags = ['Automotive']
     options = (
-        {'id': 'version', 'desc': 'Protocol version', 'default': 2, 'values': (1, 2)},
+        {'id': 'version', 'desc': 'Protocol version', 'default': 2, 'values': (1, 2), 'idn':'dec_lin_opt_version'},
     )
     annotations = (
         ('data', 'LIN data'),
         ('control', 'Protocol info'),
-        ('error', 'Error description'),
-        ('inline_error', 'Protocol violation or error'),
+        ('error', 'Error descriptions'),
+        ('inline_error', 'Protocol violations and errors'),
     )
     annotation_rows = (
-        ('data_vals', 'Data', (0, 1, 3)),
-        ('errors', 'Errors', (2,)),
+        ('data', 'Data', (0, 1, 3)),
+        ('error', 'Error', (2,)),
     )
 
     def __init__(self):
@@ -89,8 +87,10 @@ class Decoder(srd.Decoder):
         self.lin_header = []
         self.lin_rsp = []
         self.lin_version = None
+        self.out_ann = None
         self.ss_block = None
         self.es_block = None
+        self.done_break = False
 
     def start(self):
         self.out_ann = self.register(srd.OUTPUT_ANN)
@@ -114,15 +114,6 @@ class Decoder(srd.Decoder):
 
         return True
 
-    def handle_uart_idle(self):
-        if self.fsm.state not in (LinFsm.State.WaitForBreak, LinFsm.State.Error):
-            self.fsm.uart_idle_count += 1
-
-            if self.fsm.uart_idle_count == 2:
-                self.fsm.transit(LinFsm.State.Checksum)
-                self.handle_checksum()
-                self.fsm.reset()
-
     def handle_wait_for_break(self, value):
         self.wipe_break_null_byte(value)
 
@@ -134,7 +125,7 @@ class Decoder(srd.Decoder):
 
         self.fsm.reset()
         self.fsm.transit(LinFsm.State.Sync)
-
+        self.done_break = True
         self.putx([1, ['Break condition', 'Break', 'Brk', 'B']])
 
     def handle_sync(self, value):
@@ -221,14 +212,16 @@ class Decoder(srd.Decoder):
 
         return (p0 << 0) | (p1 << 1)
 
+    def end(self):
+        if self.done_break and len(self.lin_rsp):
+            self.handle_checksum()
+
     def decode(self, ss, es, data):
         ptype, rxtx, pdata = data
 
         self.ss_block, self.es_block = ss, es
 
         # Ignore all UART packets except the actual data packets or BREAK.
-        if ptype == 'IDLE':
-            self.handle_uart_idle()
         if ptype == 'BREAK':
             self.handle_break(pdata)
         if ptype != 'DATA':

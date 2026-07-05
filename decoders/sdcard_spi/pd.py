@@ -2,6 +2,7 @@
 ## This file is part of the libsigrokdecode project.
 ##
 ## Copyright (C) 2012-2020 Uwe Hermann <uwe@hermann-uwe.de>
+## Copyright (C) 2022 DreamSourceLab <support@dreamsourcelab.com>
 ##
 ## This program is free software; you can redistribute it and/or modify
 ## it under the terms of the GNU General Public License as published by
@@ -15,6 +16,10 @@
 ##
 ## You should have received a copy of the GNU General Public License
 ## along with this program; if not, see <http://www.gnu.org/licenses/>.
+##
+
+##
+## 2022/07/05 DreamSourceLab : Support for different data output formats
 ##
 
 import sigrokdecode as srd
@@ -60,7 +65,8 @@ class Decoder(srd.Decoder):
         self.ss_busy, self.es_busy = 0, 0
         self.cmd_token = []
         self.cmd_token_bits = []
-        self.is_acmd = False # Indicates CMD vs. ACMD
+        self.is_acmd = False
+        #Indicates CMD vs. ACMD
         self.blocklen = 0
         self.read_buf = []
         self.cmd_str = ''
@@ -144,13 +150,13 @@ class Decoder(srd.Decoder):
         # Bits[39:8]: Argument
         self.arg = (t[1] << 24) | (t[2] << 16) | (t[3] << 8) | t[4]
         self.ss_bit, self.es_bit = tb(4, 7)[1], tb(1, 0)[2]
-        self.putb([Ann.BIT, ['Argument: 0x%04x' % self.arg]])
+        self.putb([Ann.BIT, ['Argument: {$}', '@%04X' % self.arg]])
 
         # Bits[7:1]: CRC7
         # TODO: Check CRC7.
         crc = t[5] >> 1
         self.ss_bit, self.es_bit = tb(0, 7)[1], tb(0, 1)[2]
-        self.putb([Ann.BIT, ['CRC7: 0x%01x' % crc]])
+        self.putb([Ann.BIT, ['CRC7: {$}', '@%01X' % crc]])
 
         # Bits[0:0]: End bit (always 1)
         bit, self.ss_bit, self.es_bit = tb(0, 0)[0], tb(0, 0)[1], tb(0, 0)[2]
@@ -165,8 +171,8 @@ class Decoder(srd.Decoder):
             self.cmd_str = '%s%d (%s)' % (s, cmd, self.cmd_name(cmd))
         else:
             self.state = 'HANDLE CMD999'
-            a = '%s%d: %02x %02x %02x %02x %02x %02x' % ((s, cmd) + tuple(t))
-            self.putx([cmd, [a]])
+            a = '%s%d: {$}' % (s, cmd)
+            self.putx([cmd, [a, '@' + '%02x %02x %02x %02x %02x %02x' % (tuple(t))]])
 
     def handle_cmd0(self):
         # CMD0: GO_IDLE_STATE
@@ -220,13 +226,13 @@ class Decoder(srd.Decoder):
 
     def handle_cmd17(self):
         # CMD17: READ_SINGLE_BLOCK
-        self.putc(Ann.CMD17, 'Read a block from address 0x%04x' % self.arg)
+        self.putc(Ann.CMD17, 'Read a block from address {$}', self.arg)
         self.is_cmd17 = True
         self.state = 'GET RESPONSE R1'
 
     def handle_cmd24(self):
         # CMD24: WRITE_BLOCK
-        self.putc(Ann.CMD24, 'Write a block to address 0x%04x' % self.arg)
+        self.putc(Ann.CMD24, 'Write a block to address {$}', self.arg)
         self.is_cmd24 = True
         self.state = 'GET RESPONSE R1'
 
@@ -296,7 +302,7 @@ class Decoder(srd.Decoder):
         # Sent by the card after every command except for SEND_STATUS.
 
         self.ss_cmd, self.es_cmd = self.miso_bits[7][1], self.miso_bits[0][2]
-        self.putx([Ann.R1, ['R1: 0x%02x' % res]])
+        self.putx([Ann.R1, ['R1: {$}', '@%02x' % res]])
 
         def putbit(bit, data):
             b = self.miso_bits[bit]

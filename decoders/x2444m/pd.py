@@ -2,6 +2,7 @@
 ## This file is part of the libsigrokdecode project.
 ##
 ## Copyright (C) 2018 Stefan Petersen <spe@ciellt.se>
+## Copyright (C) 2022 DreamSourceLab <support@dreamsourcelab.com>
 ##
 ## This program is free software; you can redistribute it and/or modify
 ## it under the terms of the GNU General Public License as published by
@@ -17,6 +18,10 @@
 ## along with this program; if not, see <http://www.gnu.org/licenses/>.
 ##
 
+##
+## 2022/07/05 DreamSourceLab : Support for different data output formats
+##
+
 import re
 import sigrokdecode as srd
 
@@ -28,8 +33,7 @@ registers = {
     0x84: ['WREN',  4, lambda _: ''],
     0x85: ['RCL',   5, lambda _: ''],
     0x86: ['READ',  6, lambda v: '0x%x' % v],
-    0x87: ['READ',  6, lambda v: '0x%x' % v],
-    # 0x86/0x87 are both valid READ commands (bit 0 is "don't care").
+    0x87: ['READ',  7, lambda v: '0x%x' % v],
 }
 
 class Decoder(srd.Decoder):
@@ -50,6 +54,7 @@ class Decoder(srd.Decoder):
         ('wren', 'Write enable'),
         ('rcl', 'Recall EEPROM data into RAM'),
         ('read', 'Data read from RAM'),
+        ('read', 'Data read from RAM'),
     )
 
     def __init__(self):
@@ -65,8 +70,10 @@ class Decoder(srd.Decoder):
 
     def putreadwrite(self, ss, es, reg, idx, addr, value):
         self.put(ss, es, self.out_ann,
-                 [idx, ['%s: %s => 0x%4.4x' % (reg, addr, value),
-                        '%s: %s => 0x%4.4x' % (reg[0], addr, value), reg[0]]])
+                 [idx, ['%s: %s => {$}' % (reg, addr),
+                        '%s: %s => {$}' % (reg[0], addr),
+                        reg[0],
+                        '@%04x' % value]])
 
     def putcmd(self, ss, es, reg, idx):
         self.put(ss, es, self.out_ann, [idx, [reg, reg[0]]])

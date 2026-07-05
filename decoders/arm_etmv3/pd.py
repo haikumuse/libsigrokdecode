@@ -138,36 +138,36 @@ class Decoder(srd.Decoder):
     tags = ['Debug/trace']
     annotations = (
         ('trace', 'Trace info'),
-        ('branch', 'Branch'),
-        ('exception', 'Exception'),
+        ('branch', 'Branches'),
+        ('exception', 'Exceptions'),
         ('execution', 'Instruction execution'),
         ('data', 'Data access'),
         ('pc', 'Program counter'),
-        ('instr_e', 'Executed instruction'),
-        ('instr_n', 'Not executed instruction'),
+        ('instr_e', 'Executed instructions'),
+        ('instr_n', 'Not executed instructions'),
         ('source', 'Source code'),
         ('location', 'Current location'),
         ('function', 'Current function'),
     )
     annotation_rows = (
-        ('traces', 'Trace info', (0,)),
+        ('trace', 'Trace info', (0,)),
         ('flow', 'Code flow', (1, 2, 3,)),
-        ('data-vals', 'Data access', (4,)),
-        ('pc-vals', 'Program counters', (5,)),
-        ('instructions', 'Instructions', (6, 7,)),
-        ('sources', 'Source code', (8,)),
-        ('locations', 'Current locations', (9,)),
-        ('functions', 'Current functions', (10,)),
+        ('data', 'Data access', (4,)),
+        ('pc', 'Program counter', (5,)),
+        ('instruction', 'Instructions', (6, 7,)),
+        ('source', 'Source code', (8,)),
+        ('location', 'Current location', (9,)),
+        ('function', 'Current function', (10,)),
     )
     options = (
         {'id': 'objdump', 'desc': 'objdump path',
-            'default': 'arm-none-eabi-objdump'},
+            'default': 'arm-none-eabi-objdump', 'idn':'dec_arm_etmv3_opt_objdump'},
         {'id': 'objdump_opts', 'desc': 'objdump options',
-            'default': '-lSC'},
+            'default': '-lSC', 'idn':'dec_arm_etmv3_opt_objdump_opts'},
         {'id': 'elffile', 'desc': '.elf path',
-            'default': ''},
+            'default': '', 'idn':'dec_arm_etmv3_opt_elffile'},
         {'id': 'branch_enc', 'desc': 'Branch encoding',
-            'default': 'alternative', 'values': ('alternative', 'original')},
+            'default': 'alternative', 'values': ('alternative', 'original'), 'idn':'dec_arm_etmv3_opt_branch_enc'},
     )
 
     def __init__(self):
@@ -212,10 +212,10 @@ class Decoder(srd.Decoder):
 
         disasm = disasm.decode('utf-8', 'replace')
 
-        instpat = re.compile(r'\s*([0-9a-fA-F]+):\t+([0-9a-fA-F ]+)\t+([a-zA-Z][^;]+)\s*;?.*')
-        branchpat = re.compile(r'(b|bl|b..|bl..|cbnz|cbz)(?:\.[wn])?\s+(?:r[0-9]+,\s*)?([0-9a-fA-F]+)')
-        filepat = re.compile(r'[^\s]+[/\\\\]([a-zA-Z0-9._-]+:[0-9]+)(?:\s.*)?')
-        funcpat = re.compile(r'[0-9a-fA-F]+\s*<([^>]+)>:.*')
+        instpat = re.compile('\s*([0-9a-fA-F]+):\t+([0-9a-fA-F ]+)\t+([a-zA-Z][^;]+)\s*;?.*')
+        branchpat = re.compile('(b|bl|b..|bl..|cbnz|cbz)(?:\.[wn])?\s+(?:r[0-9]+,\s*)?([0-9a-fA-F]+)')
+        filepat = re.compile('[^\s]+[/\\\\]([a-zA-Z0-9._-]+:[0-9]+)(?:\s.*)?')
+        funcpat = re.compile('[0-9a-fA-F]+\s*<([^>]+)>:.*')
 
         prev_src = ''
         prev_file = ''

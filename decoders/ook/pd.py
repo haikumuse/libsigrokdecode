@@ -2,6 +2,7 @@
 ## This file is part of the libsigrokdecode project.
 ##
 ## Copyright (C) 2018 Steve R <steversig@virginmedia.com>
+## Copyright (C) 2023 DreamSourceLab <support@dreamsourcelab.com>
 ##
 ## This program is free software; you can redistribute it and/or modify
 ## it under the terms of the GNU General Public License as published by
@@ -16,6 +17,10 @@
 ## You should have received a copy of the GNU General Public License
 ## along with this program; if not, see <http://www.gnu.org/licenses/>.
 ##
+
+#
+# 2024/1/4 putp when end
+#
 
 import sigrokdecode as srd
 
@@ -56,7 +61,7 @@ class Decoder(srd.Decoder):
     outputs = ['ook']
     tags = ['Encoding']
     channels = (
-        {'id': 'data', 'name': 'Data', 'desc': 'Data line'},
+        {'id': 'data', 'name': 'Data', 'desc': 'Data line', 'idn':'dec_ook_chan_data'},
     )
     annotations = (
         ('frame', 'Frame'),
@@ -79,15 +84,15 @@ class Decoder(srd.Decoder):
     )
     options = (
         {'id': 'invert', 'desc': 'Invert data', 'default': 'no',
-         'values': ('no', 'yes')},
+         'values': ('no', 'yes'), 'idn':'dec_ook_opt_invert'},
         {'id': 'decodeas', 'desc': 'Decode type', 'default': 'Manchester',
-         'values': ('NRZ', 'Manchester', 'Diff Manchester')},
+         'values': ('NRZ', 'Manchester', 'Diff Manchester'), 'idn':'dec_ook_opt_decodeas'},
         {'id': 'preamble', 'desc': 'Preamble', 'default': 'auto',
-         'values': ('auto', '1010', '1111')},
+         'values': ('auto', '1010', '1111'), 'idn':'dec_ook_opt_preamble'},
         {'id': 'preamlen', 'desc': 'Filter length', 'default': '7',
-         'values': ('0', '3', '4', '5', '6', '7', '8', '9', '10')},
+         'values': ('0', '3', '4', '5', '6', '7', '8', '9', '10'), 'idn':'dec_ook_opt_preamlen'},
         {'id': 'diffmanvar', 'desc': 'Transition at start', 'default': '1',
-         'values': ('1', '0')},
+         'values': ('1', '0'), 'idn':'dec_ook_opt_diffmanvar'},
     )
 
     def __init__(self):
@@ -438,14 +443,17 @@ class Decoder(srd.Decoder):
         self.decoded_1010 = []                  # Decoded bits for man 1010
         self.pulse_lengths = []
 
+    def end(self):
+        self.putp(self.decoded)
+
     def decode(self):
         while True:
             if self.edge_count == 0: # Waiting for a signal.
-                pin = self.wait({0: 'e'})
+                (ook,) = self.wait({0: 'e'})
                 self.state = 'DECODING'
             else:
-                pin = self.wait([{0: 'e'}, {'skip': 5 * self.sample_first}])
-                if self.matched[1] and not self.matched[0]: # No edges for 5 p's.
+                (ook,) = self.wait([{0: 'e'}, {'skip': 5 * self.sample_first}])
+                if (self.matched & (0b1 << 1)) and not (self.matched & (0b1 << 0)): # No edges for 5 p's.
                     self.state = 'DECODE_TIMEOUT'
 
             if not self.samplenumber_last: # Set counters to start of signal.
@@ -456,7 +464,7 @@ class Decoder(srd.Decoder):
             if not self.sample_first: # Get number of samples for first pulse.
                 self.sample_first = samples
 
-            pinstate = pin[0]
+            pinstate = ook
             if self.state == 'DECODE_TIMEOUT': # No edge so flip the state.
                 pinstate = int(not pinstate)
             if self.invert == 'yes': # Invert signal.

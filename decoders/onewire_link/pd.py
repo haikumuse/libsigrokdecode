@@ -91,7 +91,7 @@ timing = {
 class Decoder(srd.Decoder):
     api_version = 3
     id = 'onewire_link'
-    name = '1-Wire link layer'
+    name = 'OneWire link layer'
     longname = '1-Wire serial communication bus (link layer)'
     desc = 'Bidirectional, half-duplex, asynchronous serial bus.'
     license = 'gplv2+'
@@ -99,18 +99,18 @@ class Decoder(srd.Decoder):
     outputs = ['onewire_link']
     tags = ['Embedded/industrial']
     channels = (
-        {'id': 'owr', 'name': 'OWR', 'desc': '1-Wire signal line'},
+        {'id': 'owr', 'name': 'OWR', 'desc': '1-Wire signal line', 'idn':'dec_onewire_link_chan_owr'},
     )
     options = (
         {'id': 'overdrive', 'desc': 'Start in overdrive speed',
-            'default': 'no', 'values': ('yes', 'no')},
+            'default': 'no', 'values': ('yes', 'no'), 'idn':'dec_onewire_link_opt_overdrive'},
     )
     annotations = (
         ('bit', 'Bit'),
-        ('warning', 'Warning'),
+        ('warnings', 'Warnings'),
         ('reset', 'Reset'),
         ('presence', 'Presence'),
-        ('overdrive', 'Overdrive speed notification'),
+        ('overdrive', 'Overdrive speed notifications'),
     )
     annotation_rows = (
         ('bits', 'Bits', (0, 2, 3)),
@@ -260,7 +260,7 @@ class Decoder(srd.Decoder):
                 # Calculate time since rising edge.
                 time = ((self.samplenum - self.rise) / self.samplerate) * 1000000.0
 
-                if self.matched[0] and not self.matched[1]:
+                if (self.matched & (0b1 << 0)) and not (self.matched & (0b1 << 1)):
                     # Presence detected.
                     if time < timing['PDH']['min'][self.overdrive]:
                         self.putrs([1, ['Presence detect signal is too early',
@@ -295,7 +295,7 @@ class Decoder(srd.Decoder):
                 # Wait for a falling edge and/or end of timeslot.
                 self.wait_falling_timeout(self.fall, timing['SLOT']['min'])
 
-                if self.matched[0] and not self.matched[1]:
+                if (self.matched & (0b1 << 0)) and not (self.matched & (0b1 << 1)):
                     # Low detected before end of slot.
                     self.putfs([1, ['Time slot not long enough',
                         'Slot too short',
@@ -325,7 +325,7 @@ class Decoder(srd.Decoder):
                 # Wait for a falling edge and/or end of presence detect.
                 self.wait_falling_timeout(self.rise, timing['RSTH']['min'])
 
-                if self.matched[0] and not self.matched[1]:
+                if (self.matched & (0b1 << 0)) and not (self.matched & (0b1 << 1)):
                     # Low detected before end of presence detect.
                     self.putfs([1, ['Presence detect not long enough',
                         'Presence detect too short',

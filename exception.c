@@ -17,11 +17,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <config.h>
+#include "config.h"
 #include "libsigrokdecode-internal.h" /* First, so we avoid a _POSIX_C_SOURCE warning. */
 #include "libsigrokdecode.h"
 #include <stdarg.h>
 #include <glib.h>
+#include "log.h"
 
 static char *py_stringify(PyObject *py_obj)
 {
@@ -48,7 +49,7 @@ cleanup:
 	Py_XDECREF(py_str);
 	if (!str) {
 		PyErr_Clear();
-		srd_dbg("Failed to stringify object.");
+		srd_err("Failed to stringify object.");
 	}
 
 	return str;
@@ -79,14 +80,14 @@ cleanup:
 	Py_XDECREF(py_str);
 	if (!str) {
 		PyErr_Clear();
-		srd_dbg("Failed to get object attribute %s.", attr);
+		srd_err("Failed to get object attribute %s.", attr);
 	}
 
 	return str;
 }
 
 /** @private */
-SRD_PRIV void srd_exception_catch(const char *format, ...)
+SRD_PRIV void srd_exception_catch(char **error, const char *format, ...)
 {
 	int i, ret;
 	va_list args;
@@ -96,6 +97,7 @@ SRD_PRIV void srd_exception_catch(const char *format, ...)
 	const char *etype_name_fallback;
 	PyGILState_STATE gstate;
 	GString *s;
+	char *final_msg;
 
 	py_etype = py_evalue = py_etraceback = py_mod = py_func = NULL;
 
@@ -108,7 +110,8 @@ SRD_PRIV void srd_exception_catch(const char *format, ...)
 	PyErr_Fetch(&py_etype, &py_evalue, &py_etraceback);
 	if (!py_etype) {
 		/* No current exception, so just print the message. */
-		srd_err("%s.", msg);
+		final_msg = g_strjoin(":", msg, "unknown error", NULL);
+		srd_err("%s.", final_msg);
 		goto cleanup;
 	}
 	PyErr_NormalizeException(&py_etype, &py_evalue, &py_etraceback);
@@ -118,12 +121,14 @@ SRD_PRIV void srd_exception_catch(const char *format, ...)
 	etype_name_fallback = (etype_name) ? etype_name : "(unknown exception)";
 
 	if (evalue_str)
-		srd_err("%s: %s: %s", etype_name_fallback, msg, evalue_str);
+		final_msg = g_strjoin(":", msg, etype_name_fallback, evalue_str, NULL);
 	else
-		srd_err("%s: %s.", etype_name_fallback, msg);
+		final_msg = g_strjoin(":", msg, etype_name_fallback, NULL);
 
 	g_free(evalue_str);
 	g_free(etype_name);
+
+	srd_err("%s.", final_msg);
 
 	/* If there is no traceback object, we are done. */
 	if (!py_etraceback)
@@ -157,6 +162,8 @@ SRD_PRIV void srd_exception_catch(const char *format, ...)
 	Py_DECREF(py_tracefmt);
 
 cleanup:
+	if (error)
+		*error = g_strdup(final_msg);
 	Py_XDECREF(py_func);
 	Py_XDECREF(py_mod);
 	Py_XDECREF(py_etraceback);
@@ -169,4 +176,5 @@ cleanup:
 	PyGILState_Release(gstate);
 
 	g_free(msg);
+	g_free(final_msg);
 }

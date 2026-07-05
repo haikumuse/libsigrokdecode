@@ -14,7 +14,8 @@
 ## GNU General Public License for more details.
 ##
 ## You should have received a copy of the GNU General Public License
-## along with this program; if not, see <http://www.gnu.org/licenses/>.
+## along with this program; if not, write to the Free Software
+## Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
 ##
 
 import math
@@ -34,10 +35,10 @@ class Decoder(srd.Decoder):
     outputs = []
     tags = ['Debug/trace']
     options = (
-        {'id': 'debug', 'desc': 'Debug', 'default': 'no', 'values': ('yes', 'no') },
+        {'id': 'debug', 'desc': 'Debug', 'default': 'no', 'values': ('yes', 'no') , 'idn':'dec_swim_opt_debug'},
     )
     channels = (
-        {'id': 'swim', 'name': 'SWIM', 'desc': 'SWIM data line'},
+        {'id': 'swim', 'name': 'SWIM', 'desc': 'SWIM data line', 'idn':'dec_swim_chan_swim'},
     )
     annotations = (
         ('bit', 'Bit'),
@@ -55,7 +56,7 @@ class Decoder(srd.Decoder):
         ('address', 'Address'),
         ('data-write', 'Data write'),
         ('data-read', 'Data read'),
-        ('debug-msg', 'Debug message'),
+        ('debug', 'Debug'),
     )
     annotation_rows = (
         ('bits', 'Bits', (0,)),
@@ -296,7 +297,7 @@ class Decoder(srd.Decoder):
                 if self.bit_edge[1][0] != 0 and swim == 0:
                     self.bit_maxlen = self.bit_reflen
 
-                if self.bit_edge[0][0] == 0 and self.bit_edge[1][0] == 1 and self.samplenum - self.bit_edge[0][1] <= self.bit_reflen + 2:
+                if self.bit_edge[0][0] == 0 and self.bit_edge[1][0] == 1 and self.samplenum - self.bit_edge[0][1] <= self.bit_reflen + 10:
                     self.bit(self.bit_edge[0][1], self.bit_edge[1][1], self.samplenum)
 
                 self.bit_edge.pop(0)

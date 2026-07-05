@@ -48,14 +48,14 @@ class Decoder(srd.Decoder):
     tags = ['Debug/trace']
     options = (
         {'id': 'objdump', 'desc': 'objdump path',
-            'default': 'arm-none-eabi-objdump'},
+            'default': 'arm-none-eabi-objdump', 'idn':'dec_arm_itm_opt_objdump'},
         {'id': 'objdump_opts', 'desc': 'objdump options',
-            'default': '-lSC'},
+            'default': '-lSC', 'idn':'dec_arm_itm_opt_objdump_opts'},
         {'id': 'elffile', 'desc': '.elf path',
-            'default': ''},
+            'default': '', 'idn':'dec_arm_itm_opt_elffile'},
     )
     annotations = (
-        ('trace', 'Trace info'),
+        ('trace', 'Trace information'),
         ('timestamp', 'Timestamp'),
         ('software', 'Software message'),
         ('dwt_event', 'DWT event'),
@@ -69,15 +69,15 @@ class Decoder(srd.Decoder):
         ('function', 'Current function'),
     )
     annotation_rows = (
-        ('traces', 'Trace info', (0, 1)),
-        ('softwares', 'Software traces', (2,)),
-        ('dwt_events', 'DWT events', (3,)),
-        ('dwt_watchpoints', 'DWT watchpoints', (4,)),
-        ('dwt_excs', 'Exception traces', (5,)),
-        ('dwt_pcs', 'Program counters', (6,)),
-        ('modes', 'Current modes', (7, 8, 9)),
-        ('locations', 'Current locations', (10,)),
-        ('functions', 'Current functions', (11,)),
+        ('trace', 'Trace information', (0, 1)),
+        ('software', 'Software trace', (2,)),
+        ('dwt_event', 'DWT event', (3,)),
+        ('dwt_watchpoint', 'DWT watchpoint', (4,)),
+        ('dwt_exc', 'Exception trace', (5,)),
+        ('dwt_pc', 'Program counter', (6,)),
+        ('mode', 'Current mode', (7, 8, 9)),
+        ('location', 'Current location', (10,)),
+        ('function', 'Current function', (11,)),
     )
 
     def __init__(self):
@@ -113,9 +113,9 @@ class Decoder(srd.Decoder):
 
         disasm = disasm.decode('utf-8', 'replace')
 
-        instpat = re.compile(r'\s*([0-9a-fA-F]+):\t+([0-9a-fA-F ]+)\t+([a-zA-Z][^;]+)\s*;?.*')
-        filepat = re.compile(r'[^\s]+[/\\\\]([a-zA-Z0-9._-]+:[0-9]+)(?:\s.*)?')
-        funcpat = re.compile(r'[0-9a-fA-F]+\s*<([^>]+)>:.*')
+        instpat = re.compile('\s*([0-9a-fA-F]+):\t+([0-9a-fA-F ]+)\t+([a-zA-Z][^;]+)\s*;?.*')
+        filepat = re.compile('[^\s]+[/\\\\]([a-zA-Z0-9._-]+:[0-9]+)(?:\s.*)?')
+        funcpat = re.compile('[0-9a-fA-F]+\s*<([^>]+)>:.*')
 
         prev_file = ''
         prev_func = ''

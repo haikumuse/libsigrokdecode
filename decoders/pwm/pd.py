@@ -34,21 +34,19 @@ class Decoder(srd.Decoder):
     outputs = []
     tags = ['Encoding']
     channels = (
-        {'id': 'data', 'name': 'Data', 'desc': 'Data line'},
+        {'id': 'data', 'name': 'Data', 'desc': 'Data line', 'idn':'dec_pwm_chan_data'},
     )
     options = (
         {'id': 'polarity', 'desc': 'Polarity', 'default': 'active-high',
-            'values': ('active-low', 'active-high')},
+            'values': ('active-low', 'active-high'), 'idn':'dec_pwm_opt_polarity'},
     )
     annotations = (
         ('duty-cycle', 'Duty cycle'),
         ('period', 'Period'),
-        ('frequency', 'Frequency'),
     )
     annotation_rows = (
-         ('duty-cycle-vals', 'Duty cycles', (0,)),
-         ('periods', 'Periods', (1,)),
-         ('frequency-vals', 'Frequencies', (2,)),
+         ('duty-cycle', 'Duty cycle', (0,)),
+         ('period', 'Period', (1,)),
     )
     binary = (
         ('raw', 'RAW file'),
@@ -91,29 +89,6 @@ class Decoder(srd.Decoder):
             period_s = '%.1f ms' % (period_t * 1e3)
 
         self.put(self.ss_block, self.es_block, self.out_ann, [1, [period_s]])
-
-    def putf(self, period_t):
-        if period_t != 0:
-            frequency = 1 / period_t
-
-            # Adjust granularity.
-
-            if frequency >= 1e15:
-                frequency_s = '%.3f PHz' % (frequency / 1e15)
-            elif frequency >= 1e12:
-                frequency_s = '%.3f THz' % (frequency / 1e12)
-            elif frequency >= 1e9:
-                frequency_s = '%.3f GHz' % (frequency / 1e9)
-            elif frequency >= 1e6:
-                frequency_s = '%.3f MHz' % (frequency / 1e6)
-            elif frequency >= 1e3:
-                frequency_s = '%.3f kHz' % (frequency / 1e3)
-            else:
-                frequency_s = '%.3f Hz' % (frequency)
-
-            self.put(self.ss_block, self.es_block, self.out_ann, [2, [frequency_s]])
-        else:
-            self.put(self.ss_block, self.es_block, self.out_ann, [2, ["invalid"]])
 
     def putb(self, data):
         self.put(self.ss_block, self.es_block, self.out_binary, data)
@@ -158,7 +133,6 @@ class Decoder(srd.Decoder):
             # Report the period in units of time.
             period_t = float(period / self.samplerate)
             self.putp(period_t)
-            self.putf(period_t)
 
             # Update and report the new duty cycle average.
             num_cycles += 1

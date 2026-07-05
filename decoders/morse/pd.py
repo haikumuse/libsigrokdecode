@@ -123,19 +123,19 @@ class Decoder(srd.Decoder):
     outputs = []
     tags = ['Encoding']
     channels = (
-        {'id': 'data', 'name': 'Data', 'desc': 'Data line'},
+        {'id': 'data', 'name': 'Data', 'desc': 'Data line', 'idn':'dec_morse_chan_data'},
     )
     options = (
-        {'id': 'timeunit', 'desc': 'Time unit (guess)', 'default': 0.1},
+        {'id': 'timeunit', 'desc': 'Time unit (guess)', 'default': 0.1, 'idn':'dec_morse_opt_timeunit'},
     )
     annotations = (
         ('time', 'Time'),
-        ('unit', 'Unit'),
+        ('units', 'Units'),
         ('symbol', 'Symbol'),
         ('letter', 'Letter'),
         ('word', 'Word'),
     )
-    annotation_rows = tuple((u + 's', v + 's', (i,)) for i, (u, v) in enumerate(annotations))
+    annotation_rows = tuple((u, v, (i,)) for i, (u, v) in enumerate(annotations))
 
     def __init__(self):
         self.reset()
@@ -171,7 +171,7 @@ class Decoder(srd.Decoder):
 
             symbol = (pval, iunits)
 
-            if self.matched[1]:
+            if (self.matched & (0b1 << 1)):
                 yield None # Flush word.
                 continue
 

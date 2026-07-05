@@ -122,7 +122,7 @@ class Decoder(srd.Decoder):
     outputs = ['usb_request']
     options = (
         {'id': 'in_request_start', 'desc': 'Start IN requests on',
-            'default': 'submit', 'values': ('submit', 'first-ack')},
+            'default': 'submit', 'values': ('submit', 'first-ack'), 'idn':'dec_usb_request_opt_in_request_start'},
     )
     tags = ['PC']
     annotations = (

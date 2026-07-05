@@ -2,6 +2,7 @@
 ## This file is part of the libsigrokdecode project.
 ##
 ## Copyright (C) 2014 Jens Steinhauser <jens.steinhauser@gmail.com>
+## Copyright (C) 2022 DreamSourceLab <support@dreamsourcelab.com>
 ##
 ## This program is free software; you can redistribute it and/or modify
 ## it under the terms of the GNU General Public License as published by
@@ -15,6 +16,10 @@
 ##
 ## You should have received a copy of the GNU General Public License
 ## along with this program; if not, see <http://www.gnu.org/licenses/>.
+##
+
+##
+## 2022/07/05 DreamSourceLab : Support for different data output formats
 ##
 
 import sigrokdecode as srd
@@ -53,8 +58,10 @@ regs = {
 }
 
 xn297_regs = {
-    0x19: ('DEMOD_CAL',   5),
-    0x1e: ('RF_CAL',      7),
+    0x19: ('DEMOD_CAL',   1),
+    0x1a: ('RF_CAL2',     6),
+    0x1b: ('DEM_CAL2',    3),
+    0x1e: ('RF_CAL',      3),
     0x1f: ('BB_CAL',      5),
 }
 
@@ -70,18 +77,18 @@ class Decoder(srd.Decoder):
     tags = ['IC', 'Wireless/RF']
     options = (
         {'id': 'chip', 'desc': 'Chip type',
-            'default': 'nrf24l01', 'values': ('nrf24l01', 'xn297')},
+            'default': 'nrf24l01', 'values': ('nrf24l01', 'xn297'), 'idn':'dec_nrf24l01_opt_chip'},
     )
     annotations = (
         # Sent from the host to the chip.
-        ('cmd', 'Command'),
-        ('tx-data', 'Payload'),
+        ('cmd', 'Commands sent to the device'),
+        ('tx-data', 'Payload sent to the device'),
 
         # Returned by the chip.
-        ('register', 'Register read'),
-        ('rx-data', 'Payload read'),
+        ('register', 'Registers read from the device'),
+        ('rx-data', 'Payload read from the device'),
 
-        ('warning', 'Warning'),
+        ('warning', 'Warnings'),
     )
     ann_cmd = 0
     ann_tx = 1
@@ -114,6 +121,10 @@ class Decoder(srd.Decoder):
     def putp(self, pos, ann, msg):
         '''Put an annotation message 'msg' at 'pos'.'''
         self.put(pos[0], pos[1], self.out_ann, [ann, [msg]])
+
+    def putp_ann(self, pos, ann, msg):
+        #msg is a list
+        self.put(pos[0], pos[1], self.out_ann, [ann, msg])
 
     def next(self):
         '''Resets the decoder after a complete command was decoded.'''
@@ -150,7 +161,7 @@ class Decoder(srd.Decoder):
 
         self.cmd, self.dat, self.min, self.max = c
 
-        if self.cmd in ('W_REGISTER', 'ACTIVATE'):
+        if self.cmd in ('W_REGISTER', 'ACTIVATE', 'RST_FSPI'):
             # Don't output anything now, the command is merged with
             # the data bytes following it.
             self.mb_s = pos[0]
@@ -174,7 +185,9 @@ class Decoder(srd.Decoder):
         - minimum number of following bytes
         - maximum number of following bytes
         '''
-
+        buflen = 32
+        if self.options['chip'] == 'xn297':
+            buglen = 64
         if (b & 0xe0) in (0b00000000, 0b00100000):
             c = 'R_REGISTER' if not (b & 0xe0) else 'W_REGISTER'
             d = b & 0x1f
@@ -184,15 +197,15 @@ class Decoder(srd.Decoder):
             # nRF24L01 only
             return ('ACTIVATE', None, 1, 1)
         if b == 0b01100001:
-            return ('R_RX_PAYLOAD', None, 1, 32)
+            return ('R_RX_PAYLOAD', None, 1, buflen)
         if b == 0b01100000:
             return ('R_RX_PL_WID', None, 1, 1)
         if b == 0b10100000:
-            return ('W_TX_PAYLOAD', None, 1, 32)
+            return ('W_TX_PAYLOAD', None, 1, buflen)
         if b == 0b10110000:
-            return ('W_TX_PAYLOAD_NOACK', None, 1, 32)
+            return ('W_TX_PAYLOAD_NOACK', None, 1, buflen)
         if (b & 0xf8) == 0b10101000:
-            return ('W_ACK_PAYLOAD', b & 0x07, 1, 32)
+            return ('W_ACK_PAYLOAD', b & 0x07, 1, buflen)
         if b == 0b11100001:
             return ('FLUSH_TX', None, 0, 0)
         if b == 0b11100010:
@@ -201,6 +214,14 @@ class Decoder(srd.Decoder):
             return ('REUSE_TX_PL', None, 0, 0)
         if b == 0b11111111:
             return ('NOP', None, 0, 0)
+
+        if self.options['chip'] == 'xn297':
+            if b == 0b11111101:
+                return ('CE_FSPI_ON', None, 1, 1)
+            if b == 0b11111100:
+                return ('CE_FSPI_OFF', None, 1, 1)
+            if b == 0b01010011:
+                return ('RST_FSPI', None, 1, 1)			
 
     def decode_register(self, pos, ann, regid, data):
         '''Decodes a register.
@@ -249,11 +270,13 @@ class Decoder(srd.Decoder):
                 return c
 
         data = ''.join([escape(b) for b in data])
-        text = '{} = "{}"'.format(label, data)
-        self.putp(pos, ann, text)
+
+        self.putp_ann(pos, ann, [label + ' = "{$}"', '@' + data.strip()])
 
     def finish_command(self, pos):
         '''Decodes the remaining data bytes at position 'pos'.'''
+ 
+        always_hex = True
 
         if self.cmd == 'R_REGISTER':
             self.decode_register(pos, self.ann_reg,
@@ -263,22 +286,33 @@ class Decoder(srd.Decoder):
                                  self.dat, self.mosi_bytes())
         elif self.cmd == 'R_RX_PAYLOAD':
             self.decode_mb_data(pos, self.ann_rx,
-                                self.miso_bytes(), 'RX payload', False)
+                                self.miso_bytes(), 'RX payload', always_hex)
         elif (self.cmd == 'W_TX_PAYLOAD' or
               self.cmd == 'W_TX_PAYLOAD_NOACK'):
             self.decode_mb_data(pos, self.ann_tx,
-                                self.mosi_bytes(), 'TX payload', False)
+                                self.mosi_bytes(), 'TX payload', always_hex)
         elif self.cmd == 'W_ACK_PAYLOAD':
             lbl = 'ACK payload for pipe {}'.format(self.dat)
             self.decode_mb_data(pos, self.ann_tx,
-                                self.mosi_bytes(), lbl, False)
+                                self.mosi_bytes(), lbl, always_hex)
         elif self.cmd == 'R_RX_PL_WID':
             msg = 'Payload width = {}'.format(self.mb[0][1])
             self.putp(pos, self.ann_reg, msg)
         elif self.cmd == 'ACTIVATE':
-            self.putp(pos, self.ann_cmd, self.format_command())
-            if self.mosi_bytes()[0] != 0x73:
+            if self.mosi_bytes()[0] == 0x8c:
+                self.cmd = 'DEACTIVATE'
+            elif self.mosi_bytes()[0] != 0x73:
                 self.warn(pos, 'wrong data for "ACTIVATE" command')
+            self.putp(pos, self.ann_cmd, self.format_command())
+        elif self.cmd == 'RST_FSPI':
+            if self.mosi_bytes()[0] == 0x5a:
+                self.cmd = 'RST_FSPI_HOLD'
+            elif self.mosi_bytes()[0] == 0xa5:
+                self.cmd = 'RST_FSPI_RELS'
+            else:
+                self.warn(pos, 'wrong data for "RST_FSPI" command')
+            self.putp(pos, self.ann_cmd, self.format_command())
+			
 
     def decode(self, ss, es, data):
         if not self.requirements_met:
@@ -286,7 +320,18 @@ class Decoder(srd.Decoder):
 
         ptype, data1, data2 = data
 
-        if ptype == 'CS-CHANGE':
+        if ptype == 'TRANSFER':
+            if self.cmd:
+                # Check if we got the minimum number of data bytes
+                # after the command byte.
+                if len(self.mb) < self.min:
+                    self.warn((ss, ss), 'missing data bytes')
+                elif self.mb:
+                    self.finish_command((self.mb_s, self.mb_e))
+
+            self.next()
+            self.cs_was_released = True
+        elif ptype == 'CS-CHANGE':
             if data1 is None:
                 if data2 is None:
                     self.requirements_met = False

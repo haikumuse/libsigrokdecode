@@ -2,6 +2,7 @@
 ## This file is part of the libsigrokdecode project.
 ##
 ## Copyright (C) 2018 Jorge Solla Rubiales <jorgesolla@gmail.com>
+## Copyright (C) 2019 DreamSourceLab <support@dreamsourcelab.com>
 ##
 ## This program is free software; you can redistribute it and/or modify
 ## it under the terms of the GNU General Public License as published by
@@ -58,7 +59,7 @@ class Decoder(srd.Decoder):
     outputs = []
     tags = ['Display', 'PC']
     channels = (
-        {'id': 'cec', 'name': 'CEC', 'desc': 'CEC bus data'},
+        {'id': 'cec', 'name': 'CEC', 'desc': 'CEC bus data', 'idn':'dec_cec_chan_cec'},
     )
     annotations = (
         ('st', 'Start'),
@@ -66,11 +67,11 @@ class Decoder(srd.Decoder):
         ('eom-1', 'Message continued'),
         ('nack', 'ACK not set'),
         ('ack', 'ACK set'),
-        ('bit', 'Bit'),
-        ('byte', 'Byte'),
-        ('frame', 'Frame'),
-        ('section', 'Section'),
-        ('warning', 'Warning')
+        ('bits', 'Bits'),
+        ('bytes', 'Bytes'),
+        ('frames', 'Frames'),
+        ('sections', 'Sections'),
+        ('warnings', 'Warnings')
     )
     annotation_rows = (
         ('bits', 'Bits', (0, 1, 2, 3, 4, 5)),
@@ -306,6 +307,6 @@ class Decoder(srd.Decoder):
             # If there was a timeout while waiting for ACK: RESYNC.
             # Note: This is an expected situation as no new falling edge will
             # happen until next frame is transmitted.
-            if self.matched == (False, True):
+            if self.matched == 0b10:
                 self.wait({0: 'f'})
                 self.fall_end = self.samplenum

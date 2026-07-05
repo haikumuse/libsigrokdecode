@@ -184,7 +184,7 @@ class Decoder(srd.Decoder):
     tags = ['PC']
     options = (
         {'id': 'signalling', 'desc': 'Signalling',
-            'default': 'full-speed', 'values': ('full-speed', 'low-speed')},
+            'default': 'full-speed', 'values': ('full-speed', 'low-speed'), 'idn':'dec_usb_packet_opt_signalling'},
     )
     annotations = (
         ('sync-ok', 'SYNC'),
@@ -341,10 +341,6 @@ class Decoder(srd.Decoder):
                 databytes.append(db)
                 self.packet_summary += ' %02X' % db
             self.packet_summary += ' ]'
-
-            if len(packet) < 32:
-                self.putp([28, ['Invalid packet (shorter than 32 bits)']])
-                return
 
             # Convenience Python output (no annotation) for all bytes together.
             self.ss, self.es = self.bits[16][1], self.bits[-16][2]

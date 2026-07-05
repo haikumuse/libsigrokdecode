@@ -33,7 +33,7 @@ class Decoder(srd.Decoder):
         # Currently only the standard controller is supported. This might be
         # extended by special controllers like the Nintendo Zapper light gun.
         {'id': 'variant', 'desc': 'Gamepad variant',
-            'default': 'Standard gamepad', 'values': ('Standard gamepad',)},
+            'default': 'Standard gamepad', 'values': ('Standard gamepad',), 'idn':'dec_nes_gamepad_opt_variant'},
     )
     annotations = (
         ('button', 'Button state'),
@@ -51,22 +51,24 @@ class Decoder(srd.Decoder):
 
     def reset(self):
         self.variant = None
+        self.ss_block = None
+        self.es_block = None
 
     def start(self):
         self.out_ann = self.register(srd.OUTPUT_ANN)
         self.variant = self.options['variant']
 
-    def putg(self, ss, es, cls, text):
-        self.put(ss, es, self.out_ann, [cls, [text]])
+    def putx(self, data):
+        self.put(self.ss_block, self.es_block, self.out_ann, data)
 
-    def handle_data(self, ss, es, value):
-        if value == 0xff:
-            self.putg(ss, es, 1, 'No button is pressed')
-            return
+    def handle_data(self, value):
+        if value == 0xFF:
+          self.putx([1, ['No button is pressed']])
+          return
 
         if value == 0x00:
-            self.putg(ss, es, 2, 'Gamepad is not connected')
-            return
+          self.putx([2, ['Gamepad is not connected']])
+          return
 
         buttons = [
             'A',
@@ -76,17 +78,28 @@ class Decoder(srd.Decoder):
             'North',
             'South',
             'West',
-            'East',
+            'East'
         ]
 
-        bits = '{:08b}'.format(value)
-        text = [buttons[i] for i, b in enumerate(bits) if b == '0']
-        text = ' + '.join(text)
-        self.putg(ss, es, 0, text)
+        bits = format(value, '08b')
+        button_str = ''
+
+        for b in enumerate(bits):
+            button_index = b[0]
+            button_is_pressed = b[1] == '0'
+
+            if button_is_pressed:
+                if button_str != '':
+                    button_str += ' + '
+                button_str += buttons[button_index]
+
+        self.putx([0, ['%s' % button_str]])
 
     def decode(self, ss, es, data):
-        ptype, _, _ = data
-        if ptype == 'DATA':
-            _, _, miso = data
-            self.handle_data(ss, es, miso)
-            return
+        ptype, mosi, miso = data
+        self.ss_block, self.es_block = ss, es
+
+        if ptype != 'DATA':
+          return
+
+        self.handle_data(miso)

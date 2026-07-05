@@ -2,6 +2,7 @@
 ## This file is part of the libsigrokdecode project.
 ##
 ## Copyright (C) 2014 Gump Yang <gump.yang@gmail.com>
+## Copyright (C) 2019 DreamSourceLab <support@dreamsourcelab.com>
 ##
 ## This program is free software; you can redistribute it and/or modify
 ## it under the terms of the GNU General Public License as published by
@@ -26,7 +27,7 @@ import sigrokdecode as srd
 # review and adjustment. The tolerance is an arbitrary choice, available
 # literature does not mention any. The inter-frame timeout is not a part
 # of the protocol, but an implementation detail of this sigrok decoder.
-_TIME_TOL  =  8     # tolerance, in percent
+_TIME_TOL  =  10     # tolerance, in percent
 _TIME_IDLE = 20.0   # inter-frame timeout, in ms
 _TIME_LC   = 13.5   # leader code, in ms
 _TIME_RC   = 11.25  # repeat code, in ms
@@ -56,14 +57,14 @@ class Decoder(srd.Decoder):
     outputs = []
     tags = ['IR']
     channels = (
-        {'id': 'ir', 'name': 'IR', 'desc': 'Data line'},
+        {'id': 'ir', 'name': 'IR', 'desc': 'Data line', 'idn':'dec_ir_nec_chan_ir'},
     )
     options = (
         {'id': 'polarity', 'desc': 'Polarity', 'default': 'active-low',
-            'values': ('auto', 'active-low', 'active-high')},
-        {'id': 'cd_freq', 'desc': 'Carrier Frequency', 'default': 0},
+            'values': ('auto', 'active-low', 'active-high'), 'idn':'dec_ir_nec_opt_polarity'},
+        {'id': 'cd_freq', 'desc': 'Carrier Frequency', 'default': 0, 'idn':'dec_ir_nec_opt_cd_freq'},
         {'id': 'extended', 'desc': 'Extended NEC Protocol',
-            'default': 'no', 'values': ('yes', 'no')},
+            'default': 'no', 'values': ('yes', 'no'), 'idn':'dec_ir_nec_opt_extended'},
     )
     annotations = (
         ('bit', 'Bit'),
@@ -236,7 +237,7 @@ class Decoder(srd.Decoder):
             # carrier period before they get passed to decoding logic.
             if cd_count:
                 (cur_ir,) = self.wait([{Pin.IR: 'e'}, {'skip': cd_count}])
-                if self.matched[0]:
+                if (self.matched & (0b1 << 0)):
                     cur_ir = active
                 if cur_ir == prev_ir:
                     continue

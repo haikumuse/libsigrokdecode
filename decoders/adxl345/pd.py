@@ -2,6 +2,7 @@
 ## This file is part of the libsigrokdecode project.
 ##
 ## Copyright (C) 2020 Analog Devices Inc.
+## Copyright (C) 2022 DreamSourceLab <support@dreamsourcelab.com>
 ##
 ## This program is free software; you can redistribute it and/or modify
 ## it under the terms of the GNU General Public License as published by
@@ -15,6 +16,10 @@
 ##
 ## You should have received a copy of the GNU General Public License
 ## along with this program; if not, see <http://www.gnu.org/licenses/>.
+##
+
+##
+## 2022/07/05 DreamSourceLab : Support for different data output formats
 ##
 
 import sigrokdecode as srd
@@ -410,8 +415,7 @@ class Decoder(srd.Decoder):
                     self.address <<= 1
                 self.address >>= 1
                 self.put(start_sample, addr_bit[2], self.out_ann,
-                    [Ann.REG_ADDRESS, ['ADDRESS: 0x%02X' % self.address, 'ADDR: 0x%02X'
-                    % self.address, '0x%02X' % self.address]])
+                    [Ann.REG_ADDRESS, ['ADDRESS: {$}', 'ADDR: {$}', '{$}', '@%02X' % self.address]])
                 self.ss = -1
                 self.state = St.DATA
 

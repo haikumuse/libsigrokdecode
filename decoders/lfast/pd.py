@@ -106,7 +106,7 @@ class Decoder(srd.Decoder):
     outputs = ['lfast']
     tags = ['Embedded/industrial']
     channels = (
-        {'id': 'data', 'name': 'Data', 'desc': 'TXP or RXP'},
+        {'id': 'data', 'name': 'Data', 'desc': 'TXP or RXP', 'idn':'dec_lfast_chan_data'},
     )
     annotations = (
         ('bit', 'Bits'),
@@ -272,7 +272,7 @@ class Decoder(srd.Decoder):
             self.es = self.samplenum
 
             # Check for the sleep bit if this is a timeout condition
-            if (len(self.matched) == 2) and self.matched[1]:
+            if self.matched & 0b10:
                 rising_edge = ~rising_edge
                 if self.state == state_sync:
                     self.reset()
@@ -331,5 +331,5 @@ class Decoder(srd.Decoder):
 
             # If we got here when a timeout occurred, we have processed all null
             # bits that we could and should reset now to find the next packet
-            if (len(self.matched) == 2) and self.matched[1]:
+            if self.matched & 0b10:
                 self.reset()

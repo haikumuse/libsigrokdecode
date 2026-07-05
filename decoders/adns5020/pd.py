@@ -2,6 +2,7 @@
 ## This file is part of the libsigrokdecode project.
 ##
 ## Copyright (C) 2015 Karl Palsson <karlp@tweak.net.au>
+## Copyright (C) 2022 DreamSourceLab <support@dreamsourcelab.com>
 ##
 ## This program is free software; you can redistribute it and/or modify
 ## it under the terms of the GNU General Public License as published by
@@ -15,6 +16,10 @@
 ##
 ## You should have received a copy of the GNU General Public License
 ## along with this program; if not, see <http://www.gnu.org/licenses/>.
+##
+
+##
+## 2022/07/05 DreamSourceLab : Support for different data output formats
 ##
 
 import sigrokdecode as srd
@@ -49,13 +54,13 @@ class Decoder(srd.Decoder):
     outputs = []
     tags = ['IC', 'PC', 'Sensor']
     annotations = (
-        ('read', 'Register read'),
-        ('write', 'Register write'),
-        ('warning', 'Warning'),
+        ('read', 'Register read commands'),
+        ('write', 'Register write commands'),
+        ('warning', 'Warnings'),
     )
     annotation_rows = (
-        ('reads', 'Reads', (0,)),
-        ('writes', 'Writes', (1,)),
+        ('read', 'Read', (0,)),
+        ('write', 'Write', (1,)),
         ('warnings', 'Warnings', (2,)),
     )
 
@@ -108,9 +113,10 @@ class Decoder(srd.Decoder):
         reg_desc = regs.get(reg, 'Reserved %#x' % reg)
         if reg > 0x63:
             reg_desc = 'Unknown'
+        
         if write:
-            self.putx([1, ['%s: %#x' % (reg_desc, arg)]])
+            self.putx([1, ['%s: {$}' % reg_desc, '@%02X' % arg]])
         else:
-            self.putx([0, ['%s: %d' % (reg_desc, arg)]])
+            self.putx([0, ['%s: {$}' % reg_desc, '@%02X' % arg]])
 
         self.mosi_bytes = []

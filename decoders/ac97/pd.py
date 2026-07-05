@@ -2,6 +2,7 @@
 ## This file is part of the libsigrokdecode project.
 ##
 ## Copyright (C) 2017 Gerhard Sittig <gerhard.sittig@gmx.net>
+## Copyright (C) 2019 DreamSourceLab <support@dreamsourcelab.com>
 ##
 ## This program is free software; you can redistribute it and/or modify
 ## it under the terms of the GNU General Public License as published by
@@ -24,19 +25,32 @@
 #   decoded register access).
 
 import sigrokdecode as srd
-from common.srdhelper import SrdIntEnum
 
 class ChannelError(Exception):
     pass
 
-Pin = SrdIntEnum.from_str('Pin', 'SYNC BIT_CLK SDATA_OUT SDATA_IN RESET')
+class Pins:
+    (SYNC, BIT_CLK, SDATA_OUT, SDATA_IN, RESET) = range(5)
 
-slots = 'TAG ADDR DATA 03 04 05 06 07 08 09 10 11 IO'.split()
-a = 'BITS_OUT BITS_IN SLOT_RAW_OUT SLOT_RAW_IN WARN ERROR'.split() + \
-    ['SLOT_OUT_' + s for s in slots] + ['SLOT_IN_' + s for s in slots]
-Ann = SrdIntEnum.from_list('Ann', a)
-
-Bin = SrdIntEnum.from_str('Bin', 'FRAME_OUT FRAME_IN SLOT_RAW_OUT SLOT_RAW_IN')
+class Ann:
+    (
+        BITS_OUT, BITS_IN,
+        SLOT_OUT_RAW, SLOT_OUT_TAG, SLOT_OUT_ADDR, SLOT_OUT_DATA,
+        SLOT_OUT_03, SLOT_OUT_04, SLOT_OUT_05, SLOT_OUT_06,
+        SLOT_OUT_07, SLOT_OUT_08, SLOT_OUT_09, SLOT_OUT_10,
+        SLOT_OUT_11, SLOT_OUT_IO,
+        SLOT_IN_RAW, SLOT_IN_TAG, SLOT_IN_ADDR, SLOT_IN_DATA,
+        SLOT_IN_03, SLOT_IN_04, SLOT_IN_05, SLOT_IN_06,
+        SLOT_IN_07, SLOT_IN_08, SLOT_IN_09, SLOT_IN_10,
+        SLOT_IN_11, SLOT_IN_IO,
+        WARN, ERROR,
+    ) = range(32)
+    (
+        BIN_FRAME_OUT,
+        BIN_FRAME_IN,
+        BIN_SLOT_RAW_OUT,
+        BIN_SLOT_RAW_IN,
+    ) = range(4)
 
 class Decoder(srd.Decoder):
     api_version = 3
@@ -49,21 +63,18 @@ class Decoder(srd.Decoder):
     outputs = []
     tags = ['Audio', 'PC']
     channels = (
-        {'id': 'sync', 'name': 'SYNC', 'desc': 'Frame synchronization'},
-        {'id': 'clk', 'name': 'BIT_CLK', 'desc': 'Data bits clock'},
+        {'id': 'sync', 'name': 'SYNC', 'desc': 'Frame synchronization', 'idn':'dec_ac97_chan_sync'},
+        {'id': 'clk', 'name': 'BIT_CLK', 'desc': 'Data bits clock', 'idn':'dec_ac97_chan_clk'},
     )
     optional_channels = (
-        {'id': 'out', 'name': 'SDATA_OUT', 'desc': 'Data output'},
-        {'id': 'in', 'name': 'SDATA_IN', 'desc': 'Data input'},
-        {'id': 'rst', 'name': 'RESET#', 'desc': 'Reset line'},
+        {'id': 'out', 'name': 'SDATA_OUT', 'desc': 'Data output', 'idn':'dec_ac97_opt_chan_out'},
+        {'id': 'in', 'name': 'SDATA_IN', 'desc': 'Data input', 'idn':'dec_ac97_opt_chan_in'},
+        {'id': 'rst', 'name': 'RESET#', 'desc': 'Reset line', 'idn':'dec_ac97_opt_chan_rst'},
     )
     annotations = (
-        ('bit-out', 'Output bit'),
-        ('bit-in', 'Input bit'),
+        ('bit-out', 'Output bits'),
+        ('bit-in', 'Input bits'),
         ('slot-out-raw', 'Output raw value'),
-        ('slot-in-raw', 'Input raw value'),
-        ('warning', 'Warning'),
-        ('error', 'Error'),
         ('slot-out-tag', 'Output TAG'),
         ('slot-out-cmd-addr', 'Output command address'),
         ('slot-out-cmd-data', 'Output command data'),
@@ -77,6 +88,7 @@ class Decoder(srd.Decoder):
         ('slot-out-10', 'Output slot 10'),
         ('slot-out-11', 'Output slot 11'),
         ('slot-out-io-ctrl', 'Output I/O control'),
+        ('slot-in-raw', 'Input raw value'),
         ('slot-in-tag', 'Input TAG'),
         ('slot-in-sts-addr', 'Input status address'),
         ('slot-in-sts-data', 'Input status data'),
@@ -95,14 +107,24 @@ class Decoder(srd.Decoder):
         # CMD ADDR: 'r/w', 'addr', 'unused'
         # CMD DATA: 'data', 'unused'
         # 3-11: 'data', 'unused', 'double data'
+        ('warning', 'Warning'),
+        ('error', 'Error'),
     )
     annotation_rows = (
         ('bits-out', 'Output bits', (Ann.BITS_OUT,)),
-        ('slots-out-raw', 'Output numbers', (Ann.SLOT_RAW_OUT,)),
-        ('slots-out', 'Output slots', Ann.prefixes('SLOT_OUT_')),
+        ('slots-out-raw', 'Output numbers', (Ann.SLOT_OUT_RAW,)),
+        ('slots-out', 'Output slots', (
+            Ann.SLOT_OUT_TAG, Ann.SLOT_OUT_ADDR, Ann.SLOT_OUT_DATA,
+            Ann.SLOT_OUT_03, Ann.SLOT_OUT_04, Ann.SLOT_OUT_05, Ann.SLOT_OUT_06,
+            Ann.SLOT_OUT_07, Ann.SLOT_OUT_08, Ann.SLOT_OUT_09, Ann.SLOT_OUT_10,
+            Ann.SLOT_OUT_11, Ann.SLOT_OUT_IO,)),
         ('bits-in', 'Input bits', (Ann.BITS_IN,)),
-        ('slots-in-raw', 'Input numbers', (Ann.SLOT_RAW_IN,)),
-        ('slots-in', 'Input slots', Ann.prefixes('SLOT_IN_')),
+        ('slots-in-raw', 'Input numbers', (Ann.SLOT_IN_RAW,)),
+        ('slots-in', 'Input slots', (
+            Ann.SLOT_IN_TAG, Ann.SLOT_IN_ADDR, Ann.SLOT_IN_DATA,
+            Ann.SLOT_IN_03, Ann.SLOT_IN_04, Ann.SLOT_IN_05, Ann.SLOT_IN_06,
+            Ann.SLOT_IN_07, Ann.SLOT_IN_08, Ann.SLOT_IN_09, Ann.SLOT_IN_10,
+            Ann.SLOT_IN_11, Ann.SLOT_IN_IO,)),
         ('warnings', 'Warnings', (Ann.WARN,)),
         ('errors', 'Errors', (Ann.ERROR,)),
     )
@@ -132,6 +154,8 @@ class Decoder(srd.Decoder):
         self.put(ss, es, self.out_binary, [cls, data])
 
     def __init__(self):
+        self.out_binary = None
+        self.out_ann = None
         self.reset()
 
     def reset(self):
@@ -145,8 +169,10 @@ class Decoder(srd.Decoder):
         }
 
     def start(self):
-        self.out_binary = self.register(srd.OUTPUT_BINARY)
-        self.out_ann = self.register(srd.OUTPUT_ANN)
+        if not self.out_binary:
+            self.out_binary = self.register(srd.OUTPUT_BINARY)
+        if not self.out_ann:
+            self.out_ann = self.register(srd.OUTPUT_ANN)
 
     def metadata(self, key, value):
         if key == srd.SRD_CONF_SAMPLERATE:
@@ -191,15 +217,17 @@ class Decoder(srd.Decoder):
 
     def flush_frame_bits(self):
         # Flush raw frame bits to binary annotation.
+        anncls = Ann.BIN_FRAME_OUT
         data = self.frame_bits_out[:]
         count = len(data)
         data = self.bits_to_bin_ann(data)
-        self.putb(0, count, Bin.FRAME_OUT, data)
+        self.putb(0, count, anncls, data)
 
+        anncls = Ann.BIN_FRAME_IN
         data = self.frame_bits_in[:]
         count = len(data)
         data = self.bits_to_bin_ann(data)
-        self.putb(0, count, Bin.FRAME_IN, data)
+        self.putb(0, count, anncls, data)
 
     def start_frame(self, ss):
         # Mark the start of a frame.
@@ -243,7 +271,7 @@ class Decoder(srd.Decoder):
         # that happens to be valid. For an improved implementation, it
         # either takes user provided specs or more smarts like observing
         # register access (if the capture includes it).
-        anncls = Bin.SLOT_RAW_OUT if is_out else Bin.SLOT_RAW_IN
+        anncls = Ann.BIN_SLOT_RAW_OUT if is_out else Ann.BIN_SLOT_RAW_IN
         data_bin = data >> 4
         data_bin &= 0xffff
         data_bin = data_bin.to_bytes(2, byteorder = 'big')
@@ -439,19 +467,19 @@ class Decoder(srd.Decoder):
         slot_es = self.frame_ss_list[have_len]
         if slot_data_out is not None:
             slot_text = self.int_to_nibble_text(slot_data_out, slot_len)
-            self.putx(slot_ss, slot_es, Ann.SLOT_RAW_OUT, [slot_text])
+            self.putx(slot_ss, slot_es, Ann.SLOT_OUT_RAW, [slot_text])
         if slot_data_in is not None:
             slot_text = self.int_to_nibble_text(slot_data_in, slot_len)
-            self.putx(slot_ss, slot_es, Ann.SLOT_RAW_IN, [slot_text])
+            self.putx(slot_ss, slot_es, Ann.SLOT_IN_RAW, [slot_text])
 
         self.handle_slot(slot_idx, slot_data_out, slot_data_in)
 
     def decode(self):
-        have_sdo = self.has_channel(Pin.SDATA_OUT)
-        have_sdi = self.has_channel(Pin.SDATA_IN)
+        have_sdo = self.has_channel(Pins.SDATA_OUT)
+        have_sdi = self.has_channel(Pins.SDATA_IN)
         if not have_sdo and not have_sdi:
             raise ChannelError('Either SDATA_OUT or SDATA_IN (or both) are required.')
-        have_reset = self.has_channel(Pin.RESET)
+        have_reset = self.has_channel(Pins.RESET)
 
         # Data is sampled at falling CLK edges. Annotations need to span
         # the period between rising edges. SYNC rises one cycle _before_
@@ -459,19 +487,19 @@ class Decoder(srd.Decoder):
         # and advance to the start of a bit time. Then keep getting the
         # samples and the end of all subsequent bit times.
         prev_sync = [None, None, None]
-        pins = self.wait({Pin.BIT_CLK: 'e'})
-        if pins[Pin.BIT_CLK] == 0:
-            prev_sync[-1] = pins[Pin.SYNC]
-            pins = self.wait({Pin.BIT_CLK: 'r'})
+        (sync, bit_clk, sdata_out, sdata_in, reset) = self.wait({Pins.BIT_CLK: 'e'})
+        if bit_clk == 0:
+            prev_sync[-1] = sync
+            (sync, bit_clk, sdata_out, sdata_in, reset) = self.wait({Pins.BIT_CLK: 'r'})
         bit_ss = self.samplenum
         while True:
-            pins = self.wait({Pin.BIT_CLK: 'f'})
+            (sync, bit_clk, sdata_out, sdata_in, reset) = self.wait({Pins.BIT_CLK: 'f'})
             prev_sync.pop(0)
-            prev_sync.append(pins[Pin.SYNC])
-            self.wait({Pin.BIT_CLK: 'r'})
+            prev_sync.append(sync)
+            self.wait({Pins.BIT_CLK: 'r'})
             if prev_sync[0] == 0 and prev_sync[1] == 1:
                 self.start_frame(bit_ss)
             self.handle_bits(bit_ss, self.samplenum,
-                    pins[Pin.SDATA_OUT] if have_sdo else None,
-                    pins[Pin.SDATA_IN] if have_sdi else None)
+                    sdata_out if have_sdo else None,
+                    sdata_in if have_sdi else None)
             bit_ss = self.samplenum

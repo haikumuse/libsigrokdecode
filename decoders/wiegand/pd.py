@@ -2,6 +2,7 @@
 ## This file is part of the libsigrokdecode project.
 ##
 ## Copyright (C) 2016 Sean Burford <sburford@google.com>
+## Copyright (C) 2024 DreamSourceLab <support@dreamsourcelab.com>
 ##
 ## This program is free software; you can redistribute it and/or modify
 ## it under the terms of the GNU General Public License as published by
@@ -17,7 +18,12 @@
 ## along with this program; if not, see <http://www.gnu.org/licenses/>.
 ##
 
+#
+# DreamSourceLab :Choose hex, dec, oct, bin, or ascii to display the decoding result
+#
+
 import sigrokdecode as srd
+from common.srdhelper import bits2int
 
 class SamplerateError(Exception):
     pass
@@ -33,22 +39,22 @@ class Decoder(srd.Decoder):
     outputs = []
     tags = ['Embedded/industrial', 'RFID']
     channels = (
-        {'id': 'd0', 'name': 'D0', 'desc': 'Data 0 line'},
-        {'id': 'd1', 'name': 'D1', 'desc': 'Data 1 line'},
+        {'id': 'd0', 'name': 'D0', 'desc': 'Data 0 line', 'idn':'dec_wiegand_chan_d0'},
+        {'id': 'd1', 'name': 'D1', 'desc': 'Data 1 line', 'idn':'dec_wiegand_chan_d1'},
     )
     options = (
         {'id': 'active', 'desc': 'Data lines active level',
-         'default': 'low', 'values': ('low', 'high')},
+         'default': 'low', 'values': ('low', 'high'), 'idn':'dec_wiegand_opt_active'},
         {'id': 'bitwidth_ms', 'desc': 'Single bit width in milliseconds',
-         'default': 4, 'values': (1, 2, 4, 8, 16, 32)},
+         'default': 4, 'values': (1, 2, 4, 8, 16, 32), 'idn':'dec_wiegand_opt_bitwidth_ms'},
     )
     annotations = (
-        ('bit', 'Bit'),
+        ('bits', 'Bits'),
         ('state', 'State'),
     )
     annotation_rows = (
-        ('bits', 'Bits', (0,)),
-        ('states', 'Stream states', (1,)),
+        ('bits', 'Binary value', (0,)),
+        ('state', 'Stream state', (1,)),
     )
 
     def __init__(self):
@@ -102,8 +108,26 @@ class Decoder(srd.Decoder):
             ann = None
             if self._state == 'data':
                 accum_bits = ''.join(str(x) for x in self._bits)
-                ann = [1, ['%d bits %s' % (len(self._bits), accum_bits),
-                           '%d bits' % len(self._bits)]]
+                bstart = -1 #int(self.options['bit-start'])
+                bits = self._bits
+                blen = len(self._bits)
+
+                # get data block
+                if bstart != -1: 
+                    bits = []
+                    while bstart + 4 <= blen:
+                        bits.append(self._bits[bstart+0]);
+                        bits.append(self._bits[bstart+1]);
+                        bits.append(self._bits[bstart+2]);
+                        bits.append(self._bits[bstart+3]);
+                        bstart += 4
+
+                blen = len(bits)
+                s1 = '%d bits %s' % (blen, accum_bits)
+                s2 = '%d bits' % blen
+                #s3 = '@%02X' % (bits2int(bits))
+                #ann = [1, [s1, s2, s3]]
+                ann = [1, [s1, s2]]
             elif self._state == 'invalid':
                 ann = [1, [self._state]]
             if ann:

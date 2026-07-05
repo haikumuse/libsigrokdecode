@@ -41,17 +41,17 @@ class Decoder(srd.Decoder):
     outputs = []
     tags = ['Encoding']
     channels = (
-        {'id': 'data', 'name': 'Data', 'desc': 'Data signal'},
+        {'id': 'data', 'name': 'Data', 'desc': 'Data signal', 'idn':'dec_miller_chan_data'},
     )
     options = (
-        {'id': 'baudrate', 'desc': 'Baud rate', 'default': 106000},
-        {'id': 'edge', 'desc': 'Edge', 'default': 'falling', 'values': ('rising', 'falling', 'either')},
+        {'id': 'baudrate', 'desc': 'Baud rate', 'default': 106000, 'idn':'dec_miller_opt_baudrate'},
+        {'id': 'edge', 'desc': 'Edge', 'default': 'falling', 'values': ('rising', 'falling', 'either'), 'idn':'dec_miller_opt_edge'},
     )
     annotations = (
         ('bit', 'Bit'),
         ('bitstring', 'Bitstring'),
     )
-    annotation_rows = tuple((u + 's', v + 's', (i,)) for i, (u, v) in enumerate(annotations))
+    annotation_rows = tuple((u, v, (i,)) for i, (u, v) in enumerate(annotations))
     binary = (
         ('raw', 'Raw binary'),
     )
@@ -86,7 +86,7 @@ class Decoder(srd.Decoder):
 
         while True:
             self.wait([{0: edgetype}, {'skip': int(3 * timeunit)}])
-            got_timeout = self.matched[1]
+            got_timeout = (self.matched & (0b1 << 1))
             sampledelta = (self.samplenum - prevedge)
             prevedge = self.samplenum
             timedelta = roundto(sampledelta / timeunit, 0.5)
