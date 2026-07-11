@@ -127,6 +127,12 @@ static const char *control_functions[][3] = {
     /* 0x12 */ {"general purpose controller 3 MSB", "GP ctrl 3 MSB", "GPC-3-M"},
     /* 0x13 */ {"general purpose controller 4 MSB", "GP ctrl 4 MSB", "GPC-4-M"},
     /* 0x14-0x1F undefined MSB */
+    {"undefined MSB", "undef MSB", "undef-M"}, {"undefined MSB", "undef MSB", "undef-M"},
+    {"undefined MSB", "undef MSB", "undef-M"}, {"undefined MSB", "undef MSB", "undef-M"},
+    {"undefined MSB", "undef MSB", "undef-M"}, {"undefined MSB", "undef MSB", "undef-M"},
+    {"undefined MSB", "undef MSB", "undef-M"}, {"undefined MSB", "undef MSB", "undef-M"},
+    {"undefined MSB", "undef MSB", "undef-M"}, {"undefined MSB", "undef MSB", "undef-M"},
+    {"undefined MSB", "undef MSB", "undef-M"}, {"undefined MSB", "undef MSB", "undef-M"},
     /* 0x20 */ {"bank select LSB", "bank LSB", "bank-L"},
     /* 0x21 */ {"modulation wheel/lever LSB", "modulation LSB", "mod-L"},
     /* 0x22 */ {"breath controller LSB", "breath LSB", "breath-L"},
@@ -148,6 +154,12 @@ static const char *control_functions[][3] = {
     /* 0x32 */ {"general purpose controller 3 LSB", "GP ctrl 3 LSB", "GPC-3-L"},
     /* 0x33 */ {"general purpose controller 4 LSB", "GP ctrl 4 LSB", "GPC-4-L"},
     /* 0x34-0x3F undefined LSB */
+    {"undefined LSB", "undef LSB", "undef-L"}, {"undefined LSB", "undef LSB", "undef-L"},
+    {"undefined LSB", "undef LSB", "undef-L"}, {"undefined LSB", "undef LSB", "undef-L"},
+    {"undefined LSB", "undef LSB", "undef-L"}, {"undefined LSB", "undef LSB", "undef-L"},
+    {"undefined LSB", "undef LSB", "undef-L"}, {"undefined LSB", "undef LSB", "undef-L"},
+    {"undefined LSB", "undef LSB", "undef-L"}, {"undefined LSB", "undef LSB", "undef-L"},
+    {"undefined LSB", "undef LSB", "undef-L"}, {"undefined LSB", "undef LSB", "undef-L"},
     /* 0x40 */ {"damper pedal (sustain)", "sustain", "sust"},
     /* 0x41 */ {"portamento on/off", "porta on/off", "porta on/off"},
     /* 0x42 */ {"sostenuto", "sostenuto", "sostenuto"},
@@ -170,6 +182,9 @@ static const char *control_functions[][3] = {
     /* 0x53 */ {"general purpose controller 8", "GP controller 8", "GPC-8"},
     /* 0x54 */ {"portamento control", "portamento ctrl", "porta ctrl"},
     /* 0x55-0x5A undefined */
+    {"undefined", "undef", "undef"}, {"undefined", "undef", "undef"},
+    {"undefined", "undef", "undef"}, {"undefined", "undef", "undef"},
+    {"undefined", "undef", "undef"}, {"undefined", "undef", "undef"},
     /* 0x5B */ {"effects 1 depth", "effects 1 depth", "eff 1 depth"},
     /* 0x5C */ {"effects 2 depth", "effects 2 depth", "eff 2 depth"},
     /* 0x5D */ {"effects 3 depth", "effects 3 depth", "eff 3 depth"},
@@ -182,6 +197,15 @@ static const char *control_functions[][3] = {
     /* 0x64 */ {"Registered Parameter Number LSB", "RPN LSB", "RPN-L"},
     /* 0x65 */ {"Registered Parameter Number MSB", "RPN MSB", "RPN-M"},
     /* 0x66-0x77 undefined */
+    {"undefined", "undef", "undef"}, {"undefined", "undef", "undef"},
+    {"undefined", "undef", "undef"}, {"undefined", "undef", "undef"},
+    {"undefined", "undef", "undef"}, {"undefined", "undef", "undef"},
+    {"undefined", "undef", "undef"}, {"undefined", "undef", "undef"},
+    {"undefined", "undef", "undef"}, {"undefined", "undef", "undef"},
+    {"undefined", "undef", "undef"}, {"undefined", "undef", "undef"},
+    {"undefined", "undef", "undef"}, {"undefined", "undef", "undef"},
+    {"undefined", "undef", "undef"}, {"undefined", "undef", "undef"},
+    {"undefined", "undef", "undef"}, {"undefined", "undef", "undef"},
     /* 0x78 */ {"all sound off", "all snd off", "snd off"},
     /* 0x79 */ {"reset all controllers", "reset all ctrls", "reset ctrls"},
     /* 0x7A */ {"local control", "local ctrl", "local ctrl"},
@@ -195,13 +219,6 @@ static const char *control_functions[][3] = {
 /* Get control function name by CC number */
 static const char *midi_get_ctrl_fn(uint8_t cc, int level)
 {
-    /* Handle undefined ranges */
-    if ((cc >= 0x14 && cc <= 0x1F) || (cc >= 0x34 && cc <= 0x3F) ||
-        (cc >= 0x55 && cc <= 0x5A) || (cc >= 0x66 && cc <= 0x77)) {
-        static char buf[3][32];
-        snprintf(buf[level], sizeof(buf[level]), "undefined 0x%02x", cc);
-        return buf[level];
-    }
     if (cc <= 0x7F)
         return control_functions[cc][level];
     return "undefined";
