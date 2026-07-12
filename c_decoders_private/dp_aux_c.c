@@ -152,44 +152,44 @@ enum dp_aux_ann {
 
 /* ===== 状态结构体 ===== */
 C_DECODER_STATE(dp_aux_c, {
-    int state;               // v17
+    int state;               // state
     
-    int v29;                 // prev pin value
-    int v100;                // current pin value for next iter
+    int prev_pin_val;                 // prev pin value
+    int curr_pin_val;                // current pin value for next iter
     
-    double v23;
-    double v24;
-    int v98;
-    int v96;
+    double half_ui_samples;
+    double timing_err_accum;
+    int sync_zero_count;
+    int sync_glitch_count;
     
-    uint8_t v88;
-    uint8_t v90;
-    uint8_t v92;
-    uint8_t v89;
-    uint64_t v105;
-    uint64_t v104;
-    uint64_t v107;
-    uint8_t v93;
-    uint8_t v91;
-    uint8_t v87;
-    int v101;
-    int v94;
-    int v102;
-    int v99;
-    uint64_t v9;             // accumulated half UIs
-    uint64_t v97;            // last edge sample (v97)
+    uint8_t is_alt_format;
+    uint8_t sync_end_valid;
+    uint8_t addr_phase_start;
+    uint8_t abort_flag;
+    uint64_t sync_duration;
+    uint64_t sync_pulse_count;
+    uint64_t data_byte_idx;
+    uint8_t sync_edge_count;
+    uint8_t sync_glitch_flag;
+    uint8_t is_request;
+    int expected_len;
+    int temp_v94;
+    int edge_type;
+    int byte_counter;
+    uint64_t half_ui_accum;             // accumulated half UIs
+    uint64_t last_edge_samp;            // last edge sample (last_edge_samp)
     
-    uint32_t v111[52];
-    uint32_t v112[52];
+    uint32_t temp_v111[52];
+    uint32_t temp_v112[52];
     
-    uint64_t v114;
-    uint64_t v115;
-    uint64_t v116;
-    uint64_t v117;
-    uint64_t v118;
-    uint64_t v119[4087];
-    uint64_t v113[3];
-    uint64_t v120[3];
+    uint64_t temp_v114;
+    uint64_t timing_baseline;
+    uint64_t cmd_byte;
+    uint64_t address_val;
+    uint64_t len_minus_1;
+    uint64_t data_buf[4087];
+    uint64_t temp_v113[3];
+    uint64_t ann_start_samps[3];
     
     uint64_t samplerate;
     int out_ann;
@@ -235,17 +235,17 @@ static void dp_aux_c_start(struct srd_decoder_inst *di)
     s->samplerate = c_samplerate(di);
     
     // Initial state setup like sub_18000308C
-    s->v102 = 1;
-    s->v87 = 1;
-    s->v93 = 1;
-    s->v91 = 1;
+    s->edge_type = 1;
+    s->is_request = 1;
+    s->sync_edge_count = 1;
+    s->sync_glitch_flag = 1;
     s->state = 0;
-    s->v97 = 0;
+    s->last_edge_samp = 0;
     
     // To grab the initial pin state
     int initial_pin = c_pin(di, AUX);
-    s->v100 = initial_pin;
-    s->v29 = initial_pin;
+    s->curr_pin_val = initial_pin;
+    s->prev_pin_val = initial_pin;
 }
 
 static void dp_aux_c_metadata(struct srd_decoder_inst *di, int key, uint64_t value)
@@ -258,415 +258,415 @@ static void dp_aux_c_metadata(struct srd_decoder_inst *di, int key, uint64_t val
 static void dp_aux_c_decode(struct srd_decoder_inst *di)
 {
     dp_aux_c_s *s = (dp_aux_c_s *)c_decoder_get_private(di);
-    bool v61 = false;
+    bool is_valid = false;
 
     while (1) {
         int ret = c_wait(di, CW_E(AUX), CW_END);
         if (ret != SRD_OK) return;
         
-        uint64_t v95 = di_samplenum(di);
+        uint64_t edge_samp_tmp = di_samplenum(di);
         int current_pin = c_pin(di, AUX);
         
-        uint64_t v28 = v95;
-        double v34 = (double)(v28 - s->v97);
+        uint64_t current_samp = edge_samp_tmp;
+        double delta_samp = (double)(current_samp - s->last_edge_samp);
         
-        s->v29 = s->v100;
-        int v30 = current_pin;
-        s->v100 = v30;
+        s->prev_pin_val = s->curr_pin_val;
+        int tmp_30 = current_pin;
+        s->curr_pin_val = tmp_30;
         
-        int v31 = v30;
-        if (!s->v102) {
-            v31 = v30 ^ 1;
+        int current_bit = tmp_30;
+        if (!s->edge_type) {
+            current_bit = tmp_30 ^ 1;
         }
         
-        uint8_t v32 = 0;
-        uint8_t v33 = 0;
-        uint64_t v42 = 0;
+        uint8_t tmp_32 = 0;
+        uint8_t has_sync = 0;
+        uint64_t prev_edge_samp = 0;
         
         if (s->state > 3) {
-            if (s->v29 == 0) {
-                if (v30 == 1) {
-                    v42 = s->v97;
-                    v32 = 1;
+            if (s->prev_pin_val == 0) {
+                if (tmp_30 == 1) {
+                    prev_edge_samp = s->last_edge_samp;
+                    tmp_32 = 1;
                     goto LABEL_68;
                 }
 LABEL_67:
-                v42 = s->v97;
+                prev_edge_samp = s->last_edge_samp;
                 goto LABEL_68;
             }
 LABEL_64:
-            if (s->v29 == 1 && v30 == 0) {
-                v42 = s->v97;
-                v33 = 1;
+            if (s->prev_pin_val == 1 && tmp_30 == 0) {
+                prev_edge_samp = s->last_edge_samp;
+                has_sync = 1;
                 goto LABEL_68;
             }
             goto LABEL_67;
         }
         
         // Timeout logic
-        if (v34 > (double)s->samplerate * 400000.0 / 1000000000.0) {
-            s->v87 = 1;
+        if (delta_samp > (double)s->samplerate * 400000.0 / 1000000000.0) {
+            s->is_request = 1;
         }
         
-        uint64_t v36 = 0;
-        uint64_t v35 = 0;
-        if (s->v96 < 50 && s->v98 < 50) {
-            v36 = s->v105;
-            v35 = s->v104;
+        uint64_t tmp_36 = 0;
+        uint64_t tmp_35 = 0;
+        if (s->sync_glitch_count < 50 && s->sync_zero_count < 50) {
+            tmp_36 = s->sync_duration;
+            tmp_35 = s->sync_pulse_count;
         } else {
-            s->v96 = 0;
-            s->v104 = 0;
-            s->v98 = 0;
-            s->v105 = 0;
-            v35 = 0;
-            v36 = 0;
+            s->sync_glitch_count = 0;
+            s->sync_pulse_count = 0;
+            s->sync_zero_count = 0;
+            s->sync_duration = 0;
+            tmp_35 = 0;
+            tmp_36 = 0;
         }
         
-        if (s->v29 == 1) {
-            if (s->v100) goto LABEL_67;
+        if (s->prev_pin_val == 1) {
+            if (s->curr_pin_val) goto LABEL_67;
             
-            double v37 = 0.0;
-            for (uint64_t v38 = 0; v38 < v36; v38++) {
-                v37 += (double)s->v111[v38];
+            double tmp_37 = 0.0;
+            for (uint64_t tmp_38 = 0; tmp_38 < tmp_36; tmp_38++) {
+                tmp_37 += (double)s->temp_v111[tmp_38];
             }
-            s->v23 = (s->v98 > 0) ? (v37 / (double)s->v98) : 0.0;
+            s->half_ui_samples = (s->sync_zero_count > 0) ? (tmp_37 / (double)s->sync_zero_count) : 0.0;
             
-            if (s->v23 <= 0.0) goto LABEL_43;
-            if (s->v98 >= 8) {
-                if (v34 >= s->v23 * 1.5) {
-                    v42 = s->v97;
-                    s->v98 = 0;
-                    s->v96 = 0;
+            if (s->half_ui_samples <= 0.0) goto LABEL_43;
+            if (s->sync_zero_count >= 8) {
+                if (delta_samp >= s->half_ui_samples * 1.5) {
+                    prev_edge_samp = s->last_edge_samp;
+                    s->sync_zero_count = 0;
+                    s->sync_glitch_count = 0;
                     s->state = 4;
-                    s->v104 = 0;
-                    s->v115 = 0;
-                    v33 = 1;
-                    s->v105 = 0;
+                    s->sync_pulse_count = 0;
+                    s->timing_baseline = 0;
+                    has_sync = 1;
+                    s->sync_duration = 0;
                     goto LABEL_68;
                 }
 LABEL_43:
-                v42 = s->v97;
-                s->v111[v36 + 1] = v28 - s->v97;
-                s->v105 = v36 + 1;
-                s->v98++;
-                v33 = 1;
+                prev_edge_samp = s->last_edge_samp;
+                s->temp_v111[tmp_36 + 1] = current_samp - s->last_edge_samp;
+                s->sync_duration = tmp_36 + 1;
+                s->sync_zero_count++;
+                has_sync = 1;
                 goto LABEL_68;
             }
             
-            if (v34 < s->v23 * 1.5 && s->v23 * 0.5 <= v34) {
+            if (delta_samp < s->half_ui_samples * 1.5 && s->half_ui_samples * 0.5 <= delta_samp) {
                 goto LABEL_43;
             }
             
-            if (s->v91) {
-                s->v91 = 0;
+            if (s->sync_glitch_flag) {
+                s->sync_glitch_flag = 0;
             }
-            v28 = v95;
-            v42 = s->v97;
-            s->v96 = 0;
-            s->v104 = 0;
-            s->v111[0] = v95 - s->v97;
-            s->v98 = 1;
-            s->v105 = 1;
-            v33 = 1;
+            current_samp = edge_samp_tmp;
+            prev_edge_samp = s->last_edge_samp;
+            s->sync_glitch_count = 0;
+            s->sync_pulse_count = 0;
+            s->temp_v111[0] = edge_samp_tmp - s->last_edge_samp;
+            s->sync_zero_count = 1;
+            s->sync_duration = 1;
+            has_sync = 1;
         } else {
-            if (s->v29 != 0) {
-                // v29 is 0 or 1.
-                v30 = s->v100;
+            if (s->prev_pin_val != 0) {
+                // prev_pin_val is 0 or 1.
+                tmp_30 = s->curr_pin_val;
                 goto LABEL_64;
             }
-            if (s->v100 != 1) goto LABEL_67;
+            if (s->curr_pin_val != 1) goto LABEL_67;
             
-            double v44 = 0.0;
-            for (uint64_t v45 = 0; v45 < v35; v45++) {
-                v44 += (double)s->v112[v45];
+            double tmp_44 = 0.0;
+            for (uint64_t tmp_45 = 0; tmp_45 < tmp_35; tmp_45++) {
+                tmp_44 += (double)s->temp_v112[tmp_45];
             }
-            s->v24 = (s->v96 > 0) ? (v44 / (double)s->v96) : 0.0;
+            s->timing_err_accum = (s->sync_glitch_count > 0) ? (tmp_44 / (double)s->sync_glitch_count) : 0.0;
             
-            if (s->v24 <= 0.0) goto LABEL_59;
+            if (s->timing_err_accum <= 0.0) goto LABEL_59;
             
-            if (s->v96 >= 8) {
-                if (v34 >= s->v24 * 1.5) {
-                    v42 = s->v97;
-                    s->v98 = 0;
-                    s->v105 = 0;
-                    s->v96 = 0;
-                    s->v104 = 0;
+            if (s->sync_glitch_count >= 8) {
+                if (delta_samp >= s->timing_err_accum * 1.5) {
+                    prev_edge_samp = s->last_edge_samp;
+                    s->sync_zero_count = 0;
+                    s->sync_duration = 0;
+                    s->sync_glitch_count = 0;
+                    s->sync_pulse_count = 0;
                     s->state = 4;
-                    s->v115 = 0;
-                    v32 = 1;
+                    s->timing_baseline = 0;
+                    tmp_32 = 1;
                     goto LABEL_68;
                 }
 LABEL_59:
-                v42 = s->v97;
-                s->v112[v35 + 1] = v28 - s->v97;
-                s->v104 = v35 + 1;
-                s->v96++;
-                v32 = 1;
+                prev_edge_samp = s->last_edge_samp;
+                s->temp_v112[tmp_35 + 1] = current_samp - s->last_edge_samp;
+                s->sync_pulse_count = tmp_35 + 1;
+                s->sync_glitch_count++;
+                tmp_32 = 1;
                 goto LABEL_68;
             }
             
-            if (v34 < s->v24 * 1.5 && s->v24 * 0.5 <= v34) {
+            if (delta_samp < s->timing_err_accum * 1.5 && s->timing_err_accum * 0.5 <= delta_samp) {
                 goto LABEL_59;
             }
             
-            if (s->v91) {
-                s->v91 = 0;
+            if (s->sync_glitch_flag) {
+                s->sync_glitch_flag = 0;
             }
-            v28 = v95;
-            v42 = s->v97;
-            s->v98 = 0;
-            s->v105 = 0;
-            s->v112[0] = v95 - s->v97;
-            s->v96 = 1;
-            s->v104 = 1;
-            v32 = 1;
+            current_samp = edge_samp_tmp;
+            prev_edge_samp = s->last_edge_samp;
+            s->sync_zero_count = 0;
+            s->sync_duration = 0;
+            s->temp_v112[0] = edge_samp_tmp - s->last_edge_samp;
+            s->sync_glitch_count = 1;
+            s->sync_pulse_count = 1;
+            tmp_32 = 1;
         }
 
 LABEL_68:
         if (s->state <= 3) {
-            s->v97 = v28;
+            s->last_edge_samp = current_samp;
             continue;
         }
         if (s->state >= 4096) s->state = 0;
         
-        double v50 = (double)v28;
-        double v51 = (s->v24 + s->v23) * 0.5;
-        double v52 = (v50 - (double)v42) / v51;
+        double phase_base = (double)current_samp;
+        double phase_step = (s->timing_err_accum + s->half_ui_samples) * 0.5;
+        double phase_err = (phase_base - (double)prev_edge_samp) / phase_step;
         
-        uint64_t v58 = 0;
-        if (v52 >= 6.0) {
-            v58 = (uint64_t)(v52 + 0.5);
+        uint64_t edge_half_uis = 0;
+        if (phase_err >= 6.0) {
+            edge_half_uis = (uint64_t)(phase_err + 0.5);
         } else {
-            int v53 = 1;
-            double v54 = fabs(1.0 - v52);
-            double v55 = fabs(2.0 - v52);
-            if (v54 > v55) {
-                v54 = v55;
-                v53 = 2;
+            int phase_diff = 1;
+            double tmp_54 = fabs(1.0 - phase_err);
+            double tmp_55 = fabs(2.0 - phase_err);
+            if (tmp_54 > tmp_55) {
+                tmp_54 = tmp_55;
+                phase_diff = 2;
             }
-            double v56 = fabs(3.0 - v52);
-            if (v54 > v56) {
-                v54 = v56;
-                v53 = 3;
+            double tmp_56 = fabs(3.0 - phase_err);
+            if (tmp_54 > tmp_56) {
+                tmp_54 = tmp_56;
+                phase_diff = 3;
             }
-            double v57 = fabs(4.0 - v52);
-            if (v54 > v57) {
-                v54 = v57;
-                v53 = 4;
+            double tmp_57 = fabs(4.0 - phase_err);
+            if (tmp_54 > tmp_57) {
+                tmp_54 = tmp_57;
+                phase_diff = 4;
             }
-            if (v54 > fabs(5.0 - v52)) {
-                v53 = 5;
+            if (tmp_54 > fabs(5.0 - phase_err)) {
+                phase_diff = 5;
             }
-            v58 = v53;
+            edge_half_uis = phase_diff;
         }
         
         if (s->state == 4) {
-            s->v9 = 0;
+            s->half_ui_accum = 0;
         }
-        s->v9 += v58;
+        s->half_ui_accum += edge_half_uis;
         
 
         switch (s->state) {
             case 4:
-                memset(s->v113, 0, sizeof(s->v113));
-                memset(s->v119, 0, sizeof(s->v119));
-                s->v114 = 0; s->v115 = 0; s->v116 = 0; s->v117 = 0; s->v118 = 0;
+                memset(s->temp_v113, 0, sizeof(s->temp_v113));
+                memset(s->data_buf, 0, sizeof(s->data_buf));
+                s->temp_v114 = 0; s->timing_baseline = 0; s->cmd_byte = 0; s->address_val = 0; s->len_minus_1 = 0;
                 
-                if (s->v87) {
-                    v61 = (s->v9 == 2);
+                if (s->is_request) {
+                    is_valid = (s->half_ui_accum == 2);
                 } else {
-                    v61 = (s->v9 == 5);
+                    is_valid = (s->half_ui_accum == 5);
                 }
                 
-                s->v9 = 0;
-                if (v33) {
-                    s->v102 = 0;
+                s->half_ui_accum = 0;
+                if (has_sync) {
+                    s->edge_type = 0;
                 } else {
-                    int v62 = s->v102;
-                    if (v32) v62 = 1;
-                    s->v102 = v62;
+                    int tmp_62 = s->edge_type;
+                    if (tmp_32) tmp_62 = 1;
+                    s->edge_type = tmp_62;
                 }
                 
-                if (s->v93) {
-                    s->v87 = 1; // Simplification, DSView checks if option bit is set
-                    s->v93 = 0;
+                if (s->sync_edge_count) {
+                    s->is_request = 1; // Simplification, DSView checks if option bit is set
+                    s->sync_edge_count = 0;
                 }
                 s->state = 5;
                 break;
                 
             case 5:
-                s->v9 -= 4;
+                s->half_ui_accum -= 4;
                 s->state = 6;
-                s->v120[0] = v28; // Start of Command
+                s->ann_start_samps[0] = current_samp; // Start of Command
                 
-                if (v61 && s->v9 == 0) {
-                    s->v90 = 1;
+                if (is_valid && s->half_ui_accum == 0) {
+                    s->sync_end_valid = 1;
                     goto LABEL_109;
                 }
-                s->v90 = 0;
+                s->sync_end_valid = 0;
                 
-                if (s->v9 == 1) {
-                    if (s->v87) {
-                        s->v88 = 1;
+                if (s->half_ui_accum == 1) {
+                    if (s->is_request) {
+                        s->is_alt_format = 1;
                         goto LABEL_114;
                     }
-                } else if (s->v9 != 0) {
-                    if (s->v9 == 4) s->v94 = 2;
+                } else if (s->half_ui_accum != 0) {
+                    if (s->half_ui_accum == 4) s->temp_v94 = 2;
 LABEL_114:
-                    if (s->v87) {
-                        if (s->v94 != 0) s->v94 = 2;
+                    if (s->is_request) {
+                        if (s->temp_v94 != 0) s->temp_v94 = 2;
                     }
                 } else {
 LABEL_109:
-                    if (s->v87) {
-                        s->v88 = 0;
+                    if (s->is_request) {
+                        s->is_alt_format = 0;
                         goto LABEL_114;
                     }
                 }
-                s->v114 |= s->v94;
+                s->temp_v114 |= s->temp_v94;
                 break;
                 
             case 6: {
-                uint64_t v65 = 0;
-                if (s->v87) {
-                    if (s->v90 && s->v9 == 2) {
-                        s->v92 = 1;
-                        s->v9 = 0;
+                uint64_t bits_to_read = 0;
+                if (s->is_request) {
+                    if (s->sync_end_valid && s->half_ui_accum == 2) {
+                        s->addr_phase_start = 1;
+                        s->half_ui_accum = 0;
                         s->state = 7;
                         break;
                     }
-                    s->v92 = 0;
-                    if (s->v9 < 8 || s->v88) {
-                        if (s->v9 < 16 || !s->v88) {
-                            if ( (((s->v9 >> 63) ^ (s->v9 & 1)) - (s->v9 >> 63)) != 1 ) break;
-                            uint64_t v65 = s->v88 ? 16 : 8;
-                            s->v116 |= (uint64_t)v31 << ((v65 - s->v9) / 2);
+                    s->addr_phase_start = 0;
+                    if (s->half_ui_accum < 8 || s->is_alt_format) {
+                        if (s->half_ui_accum < 16 || !s->is_alt_format) {
+                            if ( (((s->half_ui_accum >> 63) ^ (s->half_ui_accum & 1)) - (s->half_ui_accum >> 63)) != 1 ) break;
+                            uint64_t bits_to_read = s->is_alt_format ? 16 : 8;
+                            s->cmd_byte |= (uint64_t)current_bit << ((bits_to_read - s->half_ui_accum) / 2);
                             break;
                         }
                         
                         // Output command
                         char cmd_str[128];
                         char cmd_short[32];
-                        snprintf(cmd_str, sizeof(cmd_str), "Request: %s (0x%X)", get_aux_cmd_name((uint8_t)s->v116), (unsigned int)s->v116);
-                        snprintf(cmd_short, sizeof(cmd_short), "CMD: %X", (unsigned int)s->v116);
-                        c_put_v(di, s->v120[0], v28, s->out_ann, ANN_COMMAND, s->v116, "Command", cmd_str, cmd_short);
+                        snprintf(cmd_str, sizeof(cmd_str), "Request: %s (0x%X)", get_aux_cmd_name((uint8_t)s->cmd_byte), (unsigned int)s->cmd_byte);
+                        snprintf(cmd_short, sizeof(cmd_short), "CMD: %X", (unsigned int)s->cmd_byte);
+                        c_put_v(di, s->ann_start_samps[0], current_samp, s->out_ann, ANN_COMMAND, s->cmd_byte, "Command", cmd_str, cmd_short);
                         
-                        s->v9 -= 16;
-                        s->v99 = 0;
-                        s->v107 = 0;
+                        s->half_ui_accum -= 16;
+                        s->byte_counter = 0;
+                        s->data_byte_idx = 0;
                         s->state = 9;
-                        s->v120[1] = v28; // Data start sample
-                        if (s->v9 == 1) s->v119[0] |= (uint64_t)v31 << 19;
+                        s->ann_start_samps[1] = current_samp; // Data start sample
+                        if (s->half_ui_accum == 1) s->data_buf[0] |= (uint64_t)current_bit << 19;
                     } else {
                         // Output command
                         char cmd_str[128];
                         char cmd_short[32];
-                        snprintf(cmd_str, sizeof(cmd_str), "Request: %s (0x%X)", get_aux_cmd_name((uint8_t)s->v116), (unsigned int)s->v116);
-                        snprintf(cmd_short, sizeof(cmd_short), "CMD: %X", (unsigned int)s->v116);
-                        c_put_v(di, s->v120[0], v28, s->out_ann, ANN_COMMAND, s->v116, "Command", cmd_str, cmd_short);
+                        snprintf(cmd_str, sizeof(cmd_str), "Request: %s (0x%X)", get_aux_cmd_name((uint8_t)s->cmd_byte), (unsigned int)s->cmd_byte);
+                        snprintf(cmd_short, sizeof(cmd_short), "CMD: %X", (unsigned int)s->cmd_byte);
+                        c_put_v(di, s->ann_start_samps[0], current_samp, s->out_ann, ANN_COMMAND, s->cmd_byte, "Command", cmd_str, cmd_short);
                         
-                        s->v9 -= 8;
+                        s->half_ui_accum -= 8;
                         s->state = 7;
-                        s->v120[0] = v28; // Address start sample
-                        if (s->v9 == 1) s->v117 |= (uint64_t)v31 << 19;
+                        s->ann_start_samps[0] = current_samp; // Address start sample
+                        if (s->half_ui_accum == 1) s->address_val |= (uint64_t)current_bit << 19;
                     }
                 } else {
-                    if (s->v9 >= 16) {
+                    if (s->half_ui_accum >= 16) {
                         // Output reply command before transitioning
                         char cmd_str[128];
                         char cmd_short[32];
-                        format_reply_cmd((uint8_t)s->v116, cmd_str, sizeof(cmd_str));
-                        snprintf(cmd_short, sizeof(cmd_short), "CMD: %02X", (unsigned int)s->v116);
-                        c_put_v(di, s->v120[0], v28, s->out_ann, ANN_COMMAND, s->v116, "Command", cmd_str, cmd_short);
+                        format_reply_cmd((uint8_t)s->cmd_byte, cmd_str, sizeof(cmd_str));
+                        snprintf(cmd_short, sizeof(cmd_short), "CMD: %02X", (unsigned int)s->cmd_byte);
+                        c_put_v(di, s->ann_start_samps[0], current_samp, s->out_ann, ANN_COMMAND, s->cmd_byte, "Command", cmd_str, cmd_short);
 
-                        s->v9 -= 16;
+                        s->half_ui_accum -= 16;
                         // Start Data phase directly for Reply
-                        s->v107 = 0;
-                        s->v99 = 0;
+                        s->data_byte_idx = 0;
+                        s->byte_counter = 0;
                         s->state = 9;
-                        s->v120[1] = v28; // Data start sample
-                        if (s->v9 == 1) s->v119[0] |= (uint64_t)v31 << 7;
+                        s->ann_start_samps[1] = current_samp; // Data start sample
+                        if (s->half_ui_accum == 1) s->data_buf[0] |= (uint64_t)current_bit << 7;
                         break;
                     }
-                    if ( (((s->v9 >> 63) ^ (s->v9 & 1)) - (s->v9 >> 63)) == 1 && s->v9 < 16) {
-                        s->v116 |= (uint64_t)v31 << ((16 - s->v9) / 2);
+                    if ( (((s->half_ui_accum >> 63) ^ (s->half_ui_accum & 1)) - (s->half_ui_accum >> 63)) == 1 && s->half_ui_accum < 16) {
+                        s->cmd_byte |= (uint64_t)current_bit << ((16 - s->half_ui_accum) / 2);
                     }
                 }
                 break;
             }
                 
             case 7:
-                if (s->v92 && s->v9 == 4) {
-                    s->v89 = 1;
+                if (s->addr_phase_start && s->half_ui_accum == 4) {
+                    s->abort_flag = 1;
                     s->state = 5;
-                    s->v114 |= 2;
-                    s->v94 = 2;
+                    s->temp_v114 |= 2;
+                    s->temp_v94 = 2;
                     break;
                 }
-                s->v89 = 0;
-                if (s->v9 < 40) {
-                    if ( (((s->v9 >> 63) ^ (s->v9 & 1)) - (s->v9 >> 63)) == 1 ) {
-                        s->v117 |= (uint64_t)v31 << ((40 - s->v9) / 2);
+                s->abort_flag = 0;
+                if (s->half_ui_accum < 40) {
+                    if ( (((s->half_ui_accum >> 63) ^ (s->half_ui_accum & 1)) - (s->half_ui_accum >> 63)) == 1 ) {
+                        s->address_val |= (uint64_t)current_bit << ((40 - s->half_ui_accum) / 2);
                     }
                 } else {
                     char addr_str[128];
                     char addr_short[32];
-                    const char *reg_name = get_dpcd_reg_name((uint32_t)s->v117);
+                    const char *reg_name = get_dpcd_reg_name((uint32_t)s->address_val);
                     if (reg_name) {
-                        snprintf(addr_str, sizeof(addr_str), "ADDR: %05lX (%s)", (unsigned long)s->v117, reg_name);
+                        snprintf(addr_str, sizeof(addr_str), "ADDR: %05lX (%s)", (unsigned long)s->address_val, reg_name);
                     } else {
-                        snprintf(addr_str, sizeof(addr_str), "ADDR: %05lX", (unsigned long)s->v117);
+                        snprintf(addr_str, sizeof(addr_str), "ADDR: %05lX", (unsigned long)s->address_val);
                     }
-                    snprintf(addr_short, sizeof(addr_short), "%05lX", (unsigned long)s->v117);
-                    c_put_v(di, s->v120[0], v28, s->out_ann, ANN_ADDRESS, s->v117, "Address", addr_str, addr_short);
+                    snprintf(addr_short, sizeof(addr_short), "%05lX", (unsigned long)s->address_val);
+                    c_put_v(di, s->ann_start_samps[0], current_samp, s->out_ann, ANN_ADDRESS, s->address_val, "Address", addr_str, addr_short);
                     
-                    s->v9 -= 40;
+                    s->half_ui_accum -= 40;
                     s->state = 8;
-                    s->v120[0] = v28; // Length start sample
-                    if (s->v9 == 1) s->v118 |= (uint64_t)v31 << 7;
+                    s->ann_start_samps[0] = current_samp; // Length start sample
+                    if (s->half_ui_accum == 1) s->len_minus_1 |= (uint64_t)current_bit << 7;
                 }
                 break;
                 
             case 8:
-                if (s->v9 >= 16) {
+                if (s->half_ui_accum >= 16) {
                     char len_str[64];
                     char len_short[32];
-                    snprintf(len_str, sizeof(len_str), "Length: %lu", (unsigned long)s->v118 + 1); // Length is 0-based in protocol
-                    snprintf(len_short, sizeof(len_short), "LEN: %02lX", (unsigned long)s->v118);
-                    c_put_v(di, s->v120[0], v28, s->out_ann, ANN_LENGTH, s->v118, "Length", len_str, len_short);
+                    snprintf(len_str, sizeof(len_str), "Length: %lu", (unsigned long)s->len_minus_1 + 1); // Length is 0-based in protocol
+                    snprintf(len_short, sizeof(len_short), "LEN: %02lX", (unsigned long)s->len_minus_1);
+                    c_put_v(di, s->ann_start_samps[0], current_samp, s->out_ann, ANN_LENGTH, s->len_minus_1, "Length", len_str, len_short);
                     
-                    s->v9 -= 16;
+                    s->half_ui_accum -= 16;
                     // Start Data phase
-                    s->v107 = 0;
-                    s->v99 = 0;
+                    s->data_byte_idx = 0;
+                    s->byte_counter = 0;
                     s->state = 9;
-                    s->v120[1] = v28; // Data start sample
-                    if (s->v9 == 1) s->v119[0] |= (uint64_t)v31 << 7;
+                    s->ann_start_samps[1] = current_samp; // Data start sample
+                    if (s->half_ui_accum == 1) s->data_buf[0] |= (uint64_t)current_bit << 7;
                     break;
                 }
-                if ( (((s->v9 >> 63) ^ (s->v9 & 1)) - (s->v9 >> 63)) == 1 ) {
-                    s->v118 |= (uint64_t)v31 << ((16 - s->v9) / 2);
+                if ( (((s->half_ui_accum >> 63) ^ (s->half_ui_accum & 1)) - (s->half_ui_accum >> 63)) == 1 ) {
+                    s->len_minus_1 |= (uint64_t)current_bit << ((16 - s->half_ui_accum) / 2);
                 }
                 break;
                 
             default:
-                if (s->state == 16 * s->v99 + 9) {
-                    if (s->v9 < 16) {
-                        if ( (((s->v9 >> 63) ^ (s->v9 & 1)) - (s->v9 >> 63)) == 1 ) {
-                            // Wait, the original code had v113[v17], which maps to v119[16 * v99]
-                            s->v119[16 * s->v99] |= (uint64_t)v31 << ((16 - s->v9) / 2);
+                if (s->state == 16 * s->byte_counter + 9) {
+                    if (s->half_ui_accum < 16) {
+                        if ( (((s->half_ui_accum >> 63) ^ (s->half_ui_accum & 1)) - (s->half_ui_accum >> 63)) == 1 ) {
+                            // Wait, the original code had temp_v113[state], which maps to data_buf[16 * byte_counter]
+                            s->data_buf[16 * s->byte_counter] |= (uint64_t)current_bit << ((16 - s->half_ui_accum) / 2);
                         }
                     } else {
                         // Byte finished
                         char data_str[32];
-                        snprintf(data_str, sizeof(data_str), "D: %02X", (unsigned int)s->v119[16 * s->v99]);
-                        c_put_v(di, s->v120[9 + s->v99], v28, s->out_ann, ANN_DATA, s->v119[16 * s->v99], "Data", data_str);
-                        s->v9 -= 16;
-                        s->v99++;
-                        s->v107++;
-                        s->state = 16 * s->v99 + 9;
-                        s->v120[9 + s->v99] = v28;
-                        if (s->v9 == 1) s->v119[16 * s->v107] |= (uint64_t)v31 << 7;
+                        snprintf(data_str, sizeof(data_str), "D: %02X", (unsigned int)s->data_buf[16 * s->byte_counter]);
+                        c_put_v(di, s->ann_start_samps[9 + s->byte_counter], current_samp, s->out_ann, ANN_DATA, s->data_buf[16 * s->byte_counter], "Data", data_str);
+                        s->half_ui_accum -= 16;
+                        s->byte_counter++;
+                        s->data_byte_idx++;
+                        s->state = 16 * s->byte_counter + 9;
+                        s->ann_start_samps[9 + s->byte_counter] = current_samp;
+                        if (s->half_ui_accum == 1) s->data_buf[16 * s->data_byte_idx] |= (uint64_t)current_bit << 7;
                     }
                 }
                 break;
@@ -675,35 +675,35 @@ LABEL_109:
         // Post-state-machine edge-duration validation
         bool abort = false;
         
-        if (s->v89) {
+        if (s->abort_flag) {
             s->state = 5;
             abort = true;
         } else if (s->state != 0) {
             if (s->state == 4 || s->state == 5) {
-                if (v58 > 8) abort = true;
+                if (edge_half_uis > 8) abort = true;
             } else if (s->state == 6) {
-                if (v58 > 41) abort = true;
-                if (!abort && v58 > 2 && s->v9 > 1) abort = true;
+                if (edge_half_uis > 41) abort = true;
+                if (!abort && edge_half_uis > 2 && s->half_ui_accum > 1) abort = true;
             } else { // state > 6
-                if (v58 > 41) abort = true;
-                if (!abort && v58 > 2) abort = true;
+                if (edge_half_uis > 41) abort = true;
+                if (!abort && edge_half_uis > 2) abort = true;
             }
             
-            if (s->v99 > 255) {
+            if (s->byte_counter > 255) {
                 abort = true;
             }
         }
         
         if (abort) {
-            if (s->v87 && s->state == 6) {
-                c_put(di, s->v120[0], v28, s->out_ann, ANN_ERROR, "Error", "E");
+            if (s->is_request && s->state == 6) {
+                c_put(di, s->ann_start_samps[0], current_samp, s->out_ann, ANN_ERROR, "Error", "E");
             } else if (s->state > 4) {
-                c_put(di, s->v97, v28, s->out_ann, ANN_STOP, "Stop condition", "P");
+                c_put(di, s->last_edge_samp, current_samp, s->out_ann, ANN_STOP, "Stop condition", "P");
             }
             s->state = 0;
         }
         
-        s->v97 = v28; // Remember last edge
+        s->last_edge_samp = current_samp; // Remember last edge
     }
 }
 
