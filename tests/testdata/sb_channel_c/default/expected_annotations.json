@@ -1,0 +1,711 @@
+{
+	"decoder": "sb_channel_c",
+	"samplerate": 20000000,
+	"num_annotations": 64,
+	"annotations": [
+		{
+			"start_sample": 200,
+			"end_sample": 360,
+			"ann_class": 0,
+			"ann_type": 7,
+			"texts": [
+				"Sync (0xFE)", 
+				"S", 
+				"S"
+			]
+		}, 
+		{
+			"start_sample": 360,
+			"end_sample": 520,
+			"ann_class": 1,
+			"ann_type": 8,
+			"texts": [
+				"LT Transaction (Read)", 
+				"T", 
+				"Trans"
+			]
+		}, 
+		{
+			"start_sample": 530,
+			"end_sample": 680,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"~Cmd", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 800,
+			"end_sample": 960,
+			"ann_class": 0,
+			"ann_type": 7,
+			"texts": [
+				"Sync (0xFE)", 
+				"S", 
+				"S"
+			]
+		}, 
+		{
+			"start_sample": 970,
+			"end_sample": 1120,
+			"ann_class": 1,
+			"ann_type": 8,
+			"texts": [
+				"AT Command", 
+				"T", 
+				"Trans"
+			]
+		}, 
+		{
+			"start_sample": 1120,
+			"end_sample": 1280,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"0C", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 1280,
+			"end_sample": 1440,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"00", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 1450,
+			"end_sample": 1600,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"01", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 1610,
+			"end_sample": 1760,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"11", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 1770,
+			"end_sample": 1920,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"01", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 1930,
+			"end_sample": 2080,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"83", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 2090,
+			"end_sample": 2240,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"5B", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 2240,
+			"end_sample": 2400,
+			"ann_class": 1,
+			"ann_type": 8,
+			"texts": [
+				"Valid CRC", 
+				"CRC OK", 
+				"CRC"
+			]
+		}, 
+		{
+			"start_sample": 800,
+			"end_sample": 2400,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"Link Config | EnL0:1 EnL1:0 | EnReqL0:1 EnReqL1:0 Bond:1 Gen3:0 RS-FEC(G2):0 RS-FEC(G3):0 | USB4:1 TBT3:0", 
+				"Link Config", 
+				"LC"
+			]
+		}, 
+		{
+			"start_sample": 2240,
+			"end_sample": 2400,
+			"ann_class": 0,
+			"ann_type": 7,
+			"texts": [
+				"Sync (0xFE)", 
+				"S", 
+				"S"
+			]
+		}, 
+		{
+			"start_sample": 2520,
+			"end_sample": 2680,
+			"ann_class": 0,
+			"ann_type": 7,
+			"texts": [
+				"Sync (0xFE)", 
+				"S", 
+				"S"
+			]
+		}, 
+		{
+			"start_sample": 2690,
+			"end_sample": 2840,
+			"ann_class": 1,
+			"ann_type": 8,
+			"texts": [
+				"AT Command", 
+				"T", 
+				"Trans"
+			]
+		}, 
+		{
+			"start_sample": 2850,
+			"end_sample": 3000,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"0D", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 3000,
+			"end_sample": 3160,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"00", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 3170,
+			"end_sample": 3320,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"A1", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 3330,
+			"end_sample": 3480,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"51", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 3480,
+			"end_sample": 3640,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"82", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 3640,
+			"end_sample": 3800,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"42", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 3810,
+			"end_sample": 3960,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"D9", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 3970,
+			"end_sample": 4120,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"A5", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 4120,
+			"end_sample": 4280,
+			"ann_class": 1,
+			"ann_type": 8,
+			"texts": [
+				"Valid CRC", 
+				"CRC OK", 
+				"CRC"
+			]
+		}, 
+		{
+			"start_sample": 2520,
+			"end_sample": 4280,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"Gen2/3 TxFFE | L0 Req:0x1 RxLck:0 RxAct:1 ClkSw:0 New:1 Set:0x2 ReqDn:0 TxAct:1 | L1 Req:0x1 RxLck:1 RxAct:0 ClkSw:1 New:0 Set:0x2 ReqDn:1 TxAct:0", 
+				"Gen2/3 TxFFE", 
+				"TxFFE"
+			]
+		}, 
+		{
+			"start_sample": 4120,
+			"end_sample": 4280,
+			"ann_class": 0,
+			"ann_type": 7,
+			"texts": [
+				"Sync (0xFE)", 
+				"S", 
+				"S"
+			]
+		}, 
+		{
+			"start_sample": 4400,
+			"end_sample": 4560,
+			"ann_class": 0,
+			"ann_type": 7,
+			"texts": [
+				"Sync (0xFE)", 
+				"S", 
+				"S"
+			]
+		}, 
+		{
+			"start_sample": 4570,
+			"end_sample": 4720,
+			"ann_class": 1,
+			"ann_type": 8,
+			"texts": [
+				"AT Command", 
+				"T", 
+				"Trans"
+			]
+		}, 
+		{
+			"start_sample": 4730,
+			"end_sample": 4880,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"0F", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 4880,
+			"end_sample": 5040,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"00", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 5050,
+			"end_sample": 5200,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"05", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 5210,
+			"end_sample": 5360,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"01", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 5360,
+			"end_sample": 5520,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"00", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 5530,
+			"end_sample": 5680,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"01", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 5680,
+			"end_sample": 5840,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"DA", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 5850,
+			"end_sample": 6000,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"37", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 6000,
+			"end_sample": 6160,
+			"ann_class": 1,
+			"ann_type": 8,
+			"texts": [
+				"Valid CRC", 
+				"CRC OK", 
+				"CRC"
+			]
+		}, 
+		{
+			"start_sample": 4400,
+			"end_sample": 6160,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"SB Version: 256.1.5", 
+				"SB Version", 
+				"Ver"
+			]
+		}, 
+		{
+			"start_sample": 6000,
+			"end_sample": 6160,
+			"ann_class": 0,
+			"ann_type": 7,
+			"texts": [
+				"Sync (0xFE)", 
+				"S", 
+				"S"
+			]
+		}, 
+		{
+			"start_sample": 6280,
+			"end_sample": 6440,
+			"ann_class": 0,
+			"ann_type": 7,
+			"texts": [
+				"Sync (0xFE)", 
+				"S", 
+				"S"
+			]
+		}, 
+		{
+			"start_sample": 6450,
+			"end_sample": 6600,
+			"ann_class": 1,
+			"ann_type": 8,
+			"texts": [
+				"RT Command", 
+				"T", 
+				"Trans"
+			]
+		}, 
+		{
+			"start_sample": 6610,
+			"end_sample": 6760,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"05", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 6760,
+			"end_sample": 6920,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"00", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 6920,
+			"end_sample": 7080,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"2A", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 7090,
+			"end_sample": 7240,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"9B", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 7240,
+			"end_sample": 7400,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"C6", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 7400,
+			"end_sample": 7560,
+			"ann_class": 1,
+			"ann_type": 8,
+			"texts": [
+				"Valid CRC", 
+				"CRC OK", 
+				"CRC"
+			]
+		}, 
+		{
+			"start_sample": 6280,
+			"end_sample": 7560,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"Scrambler Re-Sync | ESRS G4:0 ESRS G2/3:2 | SRS G4:2 SRS G2/3:2", 
+				"Scrambler Re-Sync", 
+				"SRS"
+			]
+		}, 
+		{
+			"start_sample": 7400,
+			"end_sample": 7560,
+			"ann_class": 0,
+			"ann_type": 7,
+			"texts": [
+				"Sync (0xFE)", 
+				"S", 
+				"S"
+			]
+		}, 
+		{
+			"start_sample": 7680,
+			"end_sample": 7840,
+			"ann_class": 0,
+			"ann_type": 7,
+			"texts": [
+				"Sync (0xFE)", 
+				"S", 
+				"S"
+			]
+		}, 
+		{
+			"start_sample": 7850,
+			"end_sample": 8000,
+			"ann_class": 1,
+			"ann_type": 8,
+			"texts": [
+				"RT Command", 
+				"T", 
+				"Trans"
+			]
+		}, 
+		{
+			"start_sample": 8000,
+			"end_sample": 8160,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"0E", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 8160,
+			"end_sample": 8320,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"00", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 8320,
+			"end_sample": 8480,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"8A", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 8490,
+			"end_sample": 8640,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"45", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 8650,
+			"end_sample": 8800,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"01", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 8800,
+			"end_sample": 8960,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"02", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 8960,
+			"end_sample": 9120,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"90", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 9120,
+			"end_sample": 9280,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"B0", 
+				"D", 
+				"Data"
+			]
+		}, 
+		{
+			"start_sample": 9280,
+			"end_sample": 9440,
+			"ann_class": 1,
+			"ann_type": 8,
+			"texts": [
+				"Valid CRC", 
+				"CRC OK", 
+				"CRC"
+			]
+		}, 
+		{
+			"start_sample": 7680,
+			"end_sample": 9440,
+			"ann_class": 2,
+			"ann_type": 9,
+			"texts": [
+				"Gen4 TxFFE | L0 Req: 0x0A(New:1) L0 Set: 0x05(Done:1) | L1 Req: 0x01(New:0) L1 Set: 0x02(Done:0)", 
+				"Gen4 TxFFE", 
+				"TxFFE"
+			]
+		}, 
+		{
+			"start_sample": 9280,
+			"end_sample": 9440,
+			"ann_class": 0,
+			"ann_type": 7,
+			"texts": [
+				"Sync (0xFE)", 
+				"S", 
+				"S"
+			]
+		}
+	]
+}
