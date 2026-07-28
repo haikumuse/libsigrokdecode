@@ -1336,6 +1336,12 @@ find_match(struct srd_decoder_inst* di)
  */
 SRD_PRIV int process_samples_until_condition_match(struct srd_decoder_inst* di, gboolean* found_match)
 {
+    /* [PWMDBG] per-worker-thread diagnostics: how many edge matches did the
+     * condition scanner actually find across the whole capture. Both the C
+     * decoder wait() and the Python wait() funnel through here. */
+    static __thread uint64_t dbg_edge_matches = 0;
+    static __thread uint64_t dbg_chunk_count = 0;
+
     if (!di || !found_match)
         return SRD_ERR_ARG;
 
@@ -1347,9 +1353,21 @@ SRD_PRIV int process_samples_until_condition_match(struct srd_decoder_inst* di, 
     while (TRUE) {
         /* Feed the (next chunk of the) buffer to find_match(). */
         *found_match = find_match(di);
+        if (*found_match)
+            dbg_edge_matches++;
 
         /* Did we handle all samples yet? */
         if (di->abs_cur_samplenum >= di->abs_end_samplenum) {
+            dbg_chunk_count++;
+            if (dbg_chunk_count <= 3 || (dbg_chunk_count % 1000) == 0) {
+                fprintf(stderr, "[PWMDBG-SRD] inst=%s chunk#%llu done: cur=%llu end=%llu cum_edge_matches=%llu\n",
+                    di->inst_id,
+                    (unsigned long long)dbg_chunk_count,
+                    (unsigned long long)di->abs_cur_samplenum,
+                    (unsigned long long)di->abs_end_samplenum,
+                    (unsigned long long)dbg_edge_matches);
+                fflush(stderr);
+            }
             srd_dbg("Done, handled all samples (abs cur %" PRIu64
                     " / abs end %" PRIu64 ").",
                 di->abs_cur_samplenum, di->abs_end_samplenum);
