@@ -1153,6 +1153,13 @@ static void update_old_pins_array(struct srd_decoder_inst* di)
             sample = (di->inbuf_const && *(di->inbuf_const + i)) ? 1 : 0;
             di->old_pins_array->data[i] = sample;
         } else {
+            /* Defensive: skip if abs_cur_samplenum is out of range
+             * (snapshot recycled in repeat mode). */
+            if (di->abs_cur_samplenum < di->abs_start_samplenum ||
+                di->abs_cur_samplenum >= di->abs_end_samplenum) {
+                di->old_pins_array->data[i] = 0;
+                continue;
+            }
             sample_pos = *(di->inbuf + i) + ((di->abs_cur_samplenum - di->abs_start_samplenum) / 8);
             bit_offset = (di->abs_cur_samplenum - di->abs_start_samplenum) % 8;
             sample = *sample_pos & (1 << bit_offset) ? 1 : 0;
@@ -1179,6 +1186,13 @@ static void update_old_pins_array_initial_pins(struct srd_decoder_inst* di)
             sample = (di->inbuf_const && *(di->inbuf_const + i)) ? 1 : 0;
             di->old_pins_array->data[i] = sample;
         } else {
+            /* Defensive: skip if abs_cur_samplenum is out of range
+             * (snapshot recycled in repeat mode). */
+            if (di->abs_cur_samplenum < di->abs_start_samplenum ||
+                di->abs_cur_samplenum >= di->abs_end_samplenum) {
+                di->old_pins_array->data[i] = 0;
+                continue;
+            }
             sample_pos = *(di->inbuf + i) + ((di->abs_cur_samplenum - di->abs_start_samplenum) / 8);
             bit_offset = (di->abs_cur_samplenum - di->abs_start_samplenum) % 8;
             sample = *sample_pos & (1 << bit_offset) ? 1 : 0;
@@ -1208,6 +1222,17 @@ static gboolean term_matches(struct srd_decoder_inst* di,
         sample = (di->inbuf_const && *(di->inbuf_const + ch)) ? 1 : 0;
         *skip_allow = TRUE;
     } else {
+        /* Defensive bounds check: ensure abs_cur_samplenum is within the
+         * valid range [abs_start_samplenum, abs_end_samplenum). If the
+         * decoder is still running after the snapshot has been recycled
+         * (repeat mode), abs_cur_samplenum may exceed abs_end_samplenum,
+         * causing sample_pos to point beyond the buffer. Return FALSE
+         * (no match) instead of dereferencing an invalid pointer. */
+        if (di->abs_cur_samplenum < di->abs_start_samplenum ||
+            di->abs_cur_samplenum >= di->abs_end_samplenum) {
+            *skip_allow = TRUE;
+            return FALSE;
+        }
         sample_pos = *(di->inbuf + ch) + ((di->abs_cur_samplenum - di->abs_start_samplenum) / 8);
         bit_offset = (di->abs_cur_samplenum - di->abs_start_samplenum) % 8;
         sample = *sample_pos & (1 << bit_offset) ? 1 : 0;

@@ -863,10 +863,17 @@ static int get_current_pinvalues(struct srd_decoder_inst* di)
                 sample = (di->inbuf_const && *(di->inbuf_const + i)) ? 1 : 0;
                 new_val = PyLong_FromLong(sample);
             } else {
-                sample_pos = *(di->inbuf + i) + ((di->abs_cur_samplenum - di->abs_start_samplenum) / 8);
-                bit_offset = (di->abs_cur_samplenum - di->abs_start_samplenum) % 8;
-                sample = *sample_pos & (1 << bit_offset) ? 1 : 0;
-                new_val = PyLong_FromLong(sample);
+                /* Defensive: skip if abs_cur_samplenum is out of range
+                 * (snapshot recycled in repeat mode). */
+                if (di->abs_cur_samplenum < di->abs_start_samplenum ||
+                    di->abs_cur_samplenum >= di->abs_end_samplenum) {
+                    new_val = PyLong_FromLong(0);
+                } else {
+                    sample_pos = *(di->inbuf + i) + ((di->abs_cur_samplenum - di->abs_start_samplenum) / 8);
+                    bit_offset = (di->abs_cur_samplenum - di->abs_start_samplenum) % 8;
+                    sample = *sample_pos & (1 << bit_offset) ? 1 : 0;
+                    new_val = PyLong_FromLong(sample);
+                }
             }
         }
         PyTuple_SetItem(new_tuple, i, new_val);
