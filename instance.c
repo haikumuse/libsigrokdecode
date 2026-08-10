@@ -153,11 +153,17 @@ extern SRD_PRIV GRWLock sessions_rwlock;
 		return;
 	di->user_data = data;
 }
+ static struct srd_pd_callback* c_decoder_find_callback_impl(
+	struct srd_session* sess, int output_type)
+{
+	return srd_pd_output_callback_find(sess, output_type);
+}
  static const struct srd_decoder_runtime c_decoder_runtime = {
 	.wait = c_decoder_wait_impl,
 	.get_pin = c_decoder_get_pin_impl,
 	.get_private = c_decoder_get_private_impl,
 	.set_private = c_decoder_set_private_impl,
+	.find_callback = c_decoder_find_callback_impl,
 };
  /* =========================================================================
  * Instance operations vtable — C decoder implementation

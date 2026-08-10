@@ -15,18 +15,13 @@
  #ifndef SRD_C_DECODER_DLL
 extern GSList* pd_list;
 #endif
- static struct srd_pd_callback* srd_pd_output_callback_find_c(struct srd_session* sess, int output_type)
+ static struct srd_pd_callback* srd_pd_output_callback_find_c(struct srd_decoder_inst* di, int output_type)
 {
-	GSList* l;
-	struct srd_pd_callback* cb;
- 	if (!sess)
+	if (!di || !di->sess)
 		return NULL;
- 	for (l = sess->callbacks; l; l = l->next) {
-		cb = l->data;
-		if (cb->output_type == output_type)
-			return cb;
-	}
- 	return NULL;
+	if (di->runtime && di->runtime->find_callback)
+		return di->runtime->find_callback(di->sess, output_type);
+	return NULL;
 }
  SRD_API int c_decoder_put(struct srd_decoder_inst* di,
 	uint64_t start_sample, uint64_t end_sample,
@@ -51,7 +46,7 @@ extern GSList* pd_list;
 	pdata.data = NULL;
  	switch (pdo->output_type) {
 	case SRD_OUTPUT_ANN:
-		if ((cb = srd_pd_output_callback_find_c(di->sess, pdo->output_type))) {
+		if ((cb = srd_pd_output_callback_find_c(di, pdo->output_type))) {
 			pdata.data = &pda;
 			memset(&pda, 0, sizeof(pda));
 			pda.ann_class = ann->ann_class;
@@ -83,7 +78,7 @@ extern GSList* pd_list;
 			di->c_dec_inst->name);
 		return SRD_ERR_ARG;
 	case SRD_OUTPUT_META:
-		if ((cb = srd_pd_output_callback_find_c(di->sess, pdo->output_type))) {
+		if ((cb = srd_pd_output_callback_find_c(di, pdo->output_type))) {
 			pdata.data = ann;
 			cb->cb(&pdata, cb->cb_data);
 		}
@@ -120,7 +115,7 @@ extern GSList* pd_list;
  	pdata.start_sample = start_sample;
 	pdata.end_sample = end_sample;
 	pdata.pdo = pdo;
- 	if ((cb = srd_pd_output_callback_find_c(di->sess, SRD_OUTPUT_BINARY))) {
+ 	if ((cb = srd_pd_output_callback_find_c(di, SRD_OUTPUT_BINARY))) {
 		pdb.bin_class = bin_class;
 		pdb.size = size;
 		pdb.data = data;
@@ -154,7 +149,7 @@ extern GSList* pd_list;
  	pdata.start_sample = start_sample;
 	pdata.end_sample = end_sample;
 	pdata.pdo = pdo;
- 	if ((cb = srd_pd_output_callback_find_c(di->sess, SRD_OUTPUT_LOGIC))) {
+ 	if ((cb = srd_pd_output_callback_find_c(di, SRD_OUTPUT_LOGIC))) {
 		pdl.channel_mask = channel_mask;
 		pdl.num_channels = num_channels;
 		pdl.values = values;
@@ -325,7 +320,7 @@ extern GSList* pd_list;
 	pdata.data = &pdm;
 	pdm.key = pdo->pdo_id;
 	pdm.value = g_variant_new_int64(value);
- 	if ((cb = srd_pd_output_callback_find_c(di->sess, SRD_OUTPUT_META))) {
+ 	if ((cb = srd_pd_output_callback_find_c(di, SRD_OUTPUT_META))) {
 		cb->cb(&pdata, cb->cb_data);
 	}
  	g_variant_unref(pdm.value);
@@ -351,7 +346,7 @@ extern GSList* pd_list;
 	pdata.data = &pdm;
 	pdm.key = pdo->pdo_id;
 	pdm.value = g_variant_new_double(value);
- 	if ((cb = srd_pd_output_callback_find_c(di->sess, SRD_OUTPUT_META))) {
+ 	if ((cb = srd_pd_output_callback_find_c(di, SRD_OUTPUT_META))) {
 		cb->cb(&pdata, cb->cb_data);
 	}
  	g_variant_unref(pdm.value);

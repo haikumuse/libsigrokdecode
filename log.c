@@ -22,7 +22,7 @@
   #include "log.h"
 #include <stdarg.h>
  #define LOG_DOMAIN  "srd"
- xlog_writer *srd_log = NULL;
+ xlog_writer *srd_xlog = NULL;
 static xlog_context *log_ctx = NULL; /* private log context */
 static int is_private_log = 0;
 static int log_level_value = SRD_LOG_WARN;
@@ -77,13 +77,13 @@ SRD_PRIV int srd_log(int loglevel, const char *format, ...)
 	va_list args;
  	if (loglevel > log_level_value)
 		return SRD_OK;
- 	if (!srd_log && !user_log_cb)
+ 	if (!srd_xlog && !user_log_cb)
 		return SRD_OK; /* Not initialized yet, silently drop. */
  	va_start(args, format);
  	if (user_log_cb)
 		user_log_cb(user_log_cb_data, loglevel, format, args);
 	else
-		default_log_callback(srd_log, loglevel, format, args);
+		default_log_callback(srd_xlog, loglevel, format, args);
  	va_end(args);
  	return SRD_OK;
 }
@@ -92,9 +92,9 @@ SRD_PRIV int srd_log(int loglevel, const char *format, ...)
  */
 SRD_PRIV void srd_log_init(void)
 {
-	if (!log_ctx && !srd_log) {
+	if (!log_ctx && !srd_xlog) {
 		log_ctx = xlog_new();
-		srd_log = xlog_create_writer(log_ctx, LOG_DOMAIN);
+		srd_xlog = xlog_create_writer(log_ctx, LOG_DOMAIN);
 		is_private_log = 1;
  		if (log_level_value != SRD_LOG_WARN)
 			xlog_set_level(log_ctx, log_level_value);
@@ -108,8 +108,8 @@ SRD_PRIV void srd_log_uninit(void)
 	if (is_private_log && log_ctx) {
 		xlog_free(log_ctx);
 		log_ctx = NULL;
-		xlog_free_writer(srd_log);
-		srd_log = NULL;
+		xlog_free_writer(srd_xlog);
+		srd_xlog = NULL;
 		is_private_log = 0;
 	}
 }
@@ -120,8 +120,13 @@ SRD_API void srd_log_set_context(xlog_context *ctx)
 {
 	if (ctx) {
 		srd_log_uninit();
-		srd_log = xlog_create_writer(ctx, LOG_DOMAIN);
- 		if (log_level_value != SRD_LOG_WARN)
+		srd_xlog = xlog_create_writer(ctx, LOG_DOMAIN);
+		/* Sync our filter level to the shared context's level,
+		 * so debug messages from the frontend are not silently dropped. */
+		int ctx_level = xlog_get_level(ctx);
+		if (ctx_level >= SRD_LOG_NONE && ctx_level <= SRD_LOG_SPEW)
+			log_level_value = ctx_level;
+		else
 			xlog_set_level(ctx, log_level_value);
 	}
 }

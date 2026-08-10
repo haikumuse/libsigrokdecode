@@ -27,7 +27,7 @@
 #include <log/xlog.h>
 #include <glib.h>
 
-extern xlog_writer *srd_log;
+extern xlog_writer *srd_xlog;
 
 /**
  * Init a private log context.

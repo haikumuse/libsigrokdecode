@@ -18,19 +18,26 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
- #ifndef LIBSIGROKDECODE_LIBSIGROKDECODE_H
+
+#ifndef LIBSIGROKDECODE_LIBSIGROKDECODE_H
 #define LIBSIGROKDECODE_LIBSIGROKDECODE_H
- #include <glib.h>
+
+#include <glib.h>
 #include <log/xlog.h>
 #include <stdint.h>
- struct srd_c_dll_entry;
- #define DECODE_NUM_HEX_MAX_LEN 256
- #ifdef __cplusplus
+
+struct srd_c_dll_entry;
+
+#define DECODE_NUM_HEX_MAX_LEN 256
+
+#ifdef __cplusplus
 extern "C" {
 #endif
- /* srd_session is opaque — definition is in libsigrokdecode-internal.h */
+
+/* srd_session is opaque — definition is in libsigrokdecode-internal.h */
 struct srd_session;
- /**
+
+/**
  * @file
  *
  * The public libsigrokdecode header file to be used by frontends.
@@ -45,7 +52,8 @@ struct srd_session;
  *   #include <libsigrokdecode/libsigrokdecode.h>
  * @endcode
  */
- /*
+
+/*
  * All possible return codes of libsigrokdecode functions must be listed here.
  * Functions should never return hardcoded numbers as status, but rather
  * use these enum values. All error codes are negative numbers.
@@ -60,7 +68,8 @@ struct srd_session;
  * or reused for different errors later. You can only add new entries and
  * return codes, but never remove or redefine existing ones.
  */
- /** Status/error codes returned by libsigrokdecode functions. */
+
+/** Status/error codes returned by libsigrokdecode functions. */
 enum srd_error_code {
   SRD_OK = 0,                /**< No error */
   SRD_ERR = -1,              /**< Generic/unspecified error */
@@ -70,12 +79,14 @@ enum srd_error_code {
   SRD_ERR_PYTHON = -5,       /**< Python C API error */
   SRD_ERR_DECODERS_DIR = -6, /**< Protocol decoder path invalid */
   SRD_ERR_TERM_REQ = -7,     /**< Termination requested */
-   /*
+
+  /*
    * Note: When adding entries here, don't forget to also update the
    * srd_strerror() and srd_strerror_name() functions in error.c.
    */
 };
- /*
+
+/*
  * Use SRD_API to mark public API symbols, and SRD_PRIV for private symbols.
  *
  * Variables and functions marked 'static' are private already and don't
@@ -90,19 +101,22 @@ enum srd_error_code {
  *
  * Details: http://gcc.gnu.org/wiki/Visibility
  */
- /* Marks public libsigrokdecode API symbols. */
+
+/* Marks public libsigrokdecode API symbols. */
 #ifndef _WIN32
 #define SRD_API __attribute__((visibility("default")))
 #else
 #define SRD_API
 #endif
- /* Marks private, non-public libsigrokdecode symbols (not part of the API). */
+
+/* Marks private, non-public libsigrokdecode symbols (not part of the API). */
 #ifndef _WIN32
 #define SRD_PRIV __attribute__((visibility("hidden")))
 #else
 #define SRD_PRIV
 #endif
- /*
+
+/*
  * When adding an output type, don't forget to...
  *   - expose it to PDs in controller.c:PyInit_sigrokdecode()
  *   - add a check in module_sigrokdecode.c:Decoder_put()
@@ -117,7 +131,8 @@ enum srd_output_type {
 };
 /* Backward compatibility alias */
 #define SRD_OUTPUT_PYTHON SRD_OUTPUT_PROTO
- enum srd_term_type {
+
+enum srd_term_type {
   SRD_TERM_HIGH,
   SRD_TERM_LOW,
   SRD_TERM_RISING_EDGE,
@@ -126,29 +141,33 @@ enum srd_output_type {
   SRD_TERM_NO_EDGE,
   SRD_TERM_SKIP,
 };
- struct srd_term {
+
+struct srd_term {
   int type;
   int channel;
   uint64_t num_samples_to_skip;
   uint64_t num_samples_already_skipped;
 };
- enum c_field_type {
-	C_FIELD_U8 = 0, C_FIELD_U16, C_FIELD_U32, C_FIELD_U64,
-	C_FIELD_I8, C_FIELD_I16, C_FIELD_I32, C_FIELD_I64,
-	C_FIELD_F64, C_FIELD_STR, C_FIELD_BYTES,
-	C_FIELD_SENTINEL = 0xFF  /* internal: c_proto() end-of-args marker */
+
+enum c_field_type {
+    C_FIELD_U8 = 0, C_FIELD_U16, C_FIELD_U32, C_FIELD_U64,
+    C_FIELD_I8, C_FIELD_I16, C_FIELD_I32, C_FIELD_I64,
+    C_FIELD_F64, C_FIELD_STR, C_FIELD_BYTES,
+    C_FIELD_SENTINEL = 0xFF  /* internal: c_proto() end-of-args marker */
 };
- typedef struct {
-	uint8_t type;
-	union {
-		uint8_t  u8;  uint16_t u16; uint32_t u32; uint64_t u64;
-		int8_t   i8;  int16_t  i16; int32_t  i32; int64_t  i64;
-		double   f64;
-		const char *str;
-		struct { const uint8_t *data; uint32_t len; } bytes;
-	};
+
+typedef struct {
+    uint8_t type;
+    union {
+        uint8_t  u8;  uint16_t u16; uint32_t u32; uint64_t u64;
+        int8_t   i8;  int16_t  i16; int32_t  i32; int64_t  i64;
+        double   f64;
+        const char *str;
+        struct { const uint8_t *data; uint32_t len; } bytes;
+    };
 } c_field;
- /* c_field constructor macros — 1:1 with Python data types */
+
+/* c_field constructor macros — 1:1 with Python data types */
 #define C_U8(v)    ((c_field){.type=C_FIELD_U8, .u8=(uint8_t)(v)})
 #define C_U16(v)   ((c_field){.type=C_FIELD_U16, .u16=(uint16_t)(v)})
 #define C_U32(v)   ((c_field){.type=C_FIELD_U32, .u32=(uint32_t)(v)})
@@ -161,7 +180,8 @@ enum srd_output_type {
 #define C_STR(v)   ((c_field){.type=C_FIELD_STR, .str=(const char*)(v)})
 #define C_BYTES(d,n) ((c_field){.type=C_FIELD_BYTES, .bytes={.data=(d),.len=(n)}})
 #define C_END        ((c_field){.type=C_FIELD_SENTINEL})  /* c_proto() sentinel */
- /* c_wait() condition macros — 1:1 with Python self.wait() conditions */
+
+/* c_wait() condition macros — 1:1 with Python self.wait() conditions */
 #define _CW_ENC(_cw_t, _cw_c)  ((int)((_cw_t) << 16 | ((_cw_c) & 0xFFFF)))
 #define CW_H(ch)   _CW_ENC(SRD_TERM_HIGH, ch)
 #define CW_L(ch)   _CW_ENC(SRD_TERM_LOW, ch)
@@ -184,74 +204,97 @@ enum srd_output_type {
 #define OR      CW_OR
 #define END     CW_END
 #endif
- /* Quick access macros — 1:1 with Python self.samplenum / self.matched */
+
+/* Quick access macros — 1:1 with Python self.samplenum / self.matched */
 #define di_samplenum(di)   ((di)->abs_cur_samplenum)
 #define di_matched(di)     ((di)->match_array)
- enum srd_configkey {
+
+enum srd_configkey {
   SRD_CONF_SAMPLERATE = 10000,
 };
- enum srd_channel_type {
+
+enum srd_channel_type {
   SRD_CHANNEL_COMMON = -1,
   SRD_CHANNEL_SCLK,
   SRD_CHANNEL_SDATA,
   SRD_CHANNEL_ADATA,
 };
- extern char decoders_path[256];
- struct srd_decoder {
+
+extern char decoders_path[256];
+
+struct srd_decoder {
   /** The decoder ID. Must be non-NULL and unique for all decoders. */
   char *id;
-   /** The (short) decoder name. Must be non-NULL. */
+
+  /** The (short) decoder name. Must be non-NULL. */
   char *name;
-   /** The (long) decoder name. Must be non-NULL. */
+
+  /** The (long) decoder name. Must be non-NULL. */
   char *longname;
-   /** A (short, one-line) description of the decoder. Must be non-NULL. */
+
+  /** A (short, one-line) description of the decoder. Must be non-NULL. */
   char *desc;
-   /**
+
+  /**
    * The license of the decoder. Valid values: "gplv2+", "gplv3+".
    * Other values are currently not allowed. Must be non-NULL.
    */
   char *license;
-   /** List of possible decoder input IDs. */
+
+  /** List of possible decoder input IDs. */
   GSList *inputs;
-   /** List of possible decoder output IDs. */
+
+  /** List of possible decoder output IDs. */
   GSList *outputs;
-   /** List of tags associated with this decoder. */
+
+  /** List of tags associated with this decoder. */
   GSList *tags;
-   /** List of channels required by this decoder. */
+
+  /** List of channels required by this decoder. */
   GSList *channels;
-   /** List of optional channels for this decoder. */
+
+  /** List of optional channels for this decoder. */
   GSList *opt_channels;
-   /**
+
+  /**
    * List of NULL-terminated char[], containing descriptions of the
    * supported annotation output.
    */
   GSList *annotations;
   GSList *ann_types;
-   /**
+
+  /**
    * List of annotation rows (row items: id, description, and a list
    * of annotation classes belonging to this row).
    */
   GSList *annotation_rows;
-   /**
+
+  /**
    * List of NULL-terminated char[], containing descriptions of the
    * supported binary output.
    */
   GSList *binary;
-   /** List of decoder options. */
+
+  /** List of decoder options. */
   GSList *options;
-   /** Python module. */
+
+  /** Python module. */
   void *py_mod;
-   /** sigrokdecode.Decoder class. */
+
+  /** sigrokdecode.Decoder class. */
   void *py_dec;
-   gboolean is_c_decoder;
+
+  gboolean is_c_decoder;
   struct srd_c_decoder *c_dec;
 };
- enum srd_initial_pin {
+
+enum srd_initial_pin {
   SRD_INITIAL_PIN_LOW,
   SRD_INITIAL_PIN_HIGH,
   SRD_INITIAL_PIN_SAME_AS_SAMPLE0,
 };
- /**
+
+/**
  * Structure which contains information about one protocol decoder channel.
  * For example, I2C has two channels, SDA and SCL.
  */
@@ -269,32 +312,41 @@ struct srd_channel {
   /** The language text soruce id. */
   char *idn;
 };
- struct srd_decoder_option {
+
+struct srd_decoder_option {
   char *id;
   char *idn;
   char *desc;
   GVariant *def;
   GSList *values;
 };
- struct srd_decoder_annotation_row {
+
+struct srd_decoder_annotation_row {
   char *id;
   char *desc;
   GSList *ann_classes;
 };
- struct srd_decoder_binary {
+
+struct srd_decoder_binary {
   int bin_class;
   const char *id;
   const char *desc;
 };
- struct srd_decoder_inst;
- struct srd_decoder_runtime {
+
+struct srd_decoder_inst;
+struct srd_pd_callback;
+
+struct srd_decoder_runtime {
   int (*wait)(struct srd_decoder_inst *di, GSList *condition_list,
-			  uint64_t *samplenum, uint64_t *matched);
+              uint64_t *samplenum, uint64_t *matched);
   uint8_t (*get_pin)(struct srd_decoder_inst *di, int ch, uint64_t samplenum);
   void *(*get_private)(struct srd_decoder_inst *di);
   void (*set_private)(struct srd_decoder_inst *di, void *data);
+  struct srd_pd_callback *(*find_callback)(struct srd_session *sess,
+                                           int output_type);
 };
- struct srd_decoder_inst {
+
+struct srd_decoder_inst {
   struct srd_decoder *decoder;
   struct srd_session *sess;
   void *py_inst;
@@ -304,51 +356,72 @@ struct srd_channel {
   int dec_num_channels;
   int *dec_channelmap;
   GSList *next_di;
-   /** List of conditions a PD wants to wait for.
+
+  /** List of conditions a PD wants to wait for.
    *  Type is srd_term* of GSList*
    */
   GSList *condition_list;
-   /** Array of booleans denoting which conditions matched. */
+
+  /** Array of booleans denoting which conditions matched. */
   uint64_t match_array;
-   /** Absolute start sample number. */
+
+  /** Absolute start sample number. */
   uint64_t abs_start_samplenum;
-   /** Absolute end sample number. */
+
+  /** Absolute end sample number. */
   uint64_t abs_end_samplenum;
-   /** Pointer to the buffer/chunk of input samples. */
+
+  /** Pointer to the buffer/chunk of input samples. */
   const uint8_t **inbuf;
-   /** Pointer to the buffer/chunk of input const blocks. */
+
+  /** Pointer to the buffer/chunk of input const blocks. */
   const uint8_t *inbuf_const;
-   /** Length (in bytes) of the input sample buffer. */
+
+  /** Length (in bytes) of the input sample buffer. */
   uint64_t inbuflen;
-   /** Absolute current samplenumber. */
+
+  /** Absolute current samplenumber. */
   uint64_t abs_cur_samplenum;
-   /** Absolute current sample matched conditions. */
+
+  /** Absolute current sample matched conditions. */
   gboolean abs_cur_matched;
-   /** Array of "old" (previous sample) pin values.
+
+  /** Array of "old" (previous sample) pin values.
    *  Type of uint8_t
    */
   GArray *old_pins_array;
-   /** Handle for this PD stack's worker thread. */
+
+  /** Handle for this PD stack's worker thread. */
   GThread *thread_handle;
-   /** Indicates whether new samples are available for processing. */
+
+  /** Indicates whether new samples are available for processing. */
   gboolean got_new_samples;
-   /** Indicates whether the worker thread has handled all samples. */
+
+  /** Indicates whether the worker thread has handled all samples. */
   gboolean handled_all_samples;
-   /** Requests termination of wait() and decode(). */
+
+  /** Requests termination of wait() and decode(). */
   gboolean want_wait_terminate;
-   /** First entry of wait(). */
+
+  /** First entry of wait(). */
   gboolean first_pos;
-   /** skip zero flag. */
+
+  /** skip zero flag. */
   gboolean skip_zero;
-   /** Indicates the current state of the decoder stack. */
+
+  /** Indicates the current state of the decoder stack. */
   int decoder_state;
-   GCond got_new_samples_cond;
+
+  GCond got_new_samples_cond;
   GCond handled_all_samples_cond;
   GMutex data_mutex;
-   char *python_proc_error;
-   /** the task normal ends flag */
+
+  char *python_proc_error;
+
+  /** the task normal ends flag */
   int is_task_stop_signal;
-   gboolean is_c_inst;
+
+  gboolean is_c_inst;
   struct srd_c_decoder *c_dec_inst;
   uint8_t *c_pin_cache;
   uint64_t c_pin_cache_samplenum;
@@ -361,38 +434,46 @@ struct srd_channel {
   const struct srd_decoder_runtime *runtime;
   const void *ops; /* srd_inst_ops* — set at creation, do not modify */
 };
- #define SRD_C_DECODER_API_VERSION 4
+
+#define SRD_C_DECODER_API_VERSION 4
 #define SRD_C_DECODER_API_MIN_VERSION 4
- #ifdef _WIN32
+
+#ifdef _WIN32
 #define SRD_C_DECODER_EXPORT __declspec(dllexport)
 #else
 #define SRD_C_DECODER_EXPORT __attribute__((visibility("default")))
 #endif
- typedef struct srd_c_decoder *(*srd_c_decoder_entry_func)(void);
+
+typedef struct srd_c_decoder *(*srd_c_decoder_entry_func)(void);
 typedef int (*srd_c_decoder_api_version_func)(void);
- struct srd_c_ann_row {
+
+struct srd_c_ann_row {
   const char *id;
   const char *desc;
   const int *ann_classes;
   int num_ann_classes;
 };
- struct srd_c_decoder {
+
+struct srd_c_decoder {
   const char *id;
   const char *name;
   const char *longname;
   const char *desc;
   const char *license;
-   const struct srd_channel *channels;
+
+  const struct srd_channel *channels;
   int num_channels;
   const struct srd_channel *optional_channels;
   int num_optional_channels;
   const struct srd_decoder_option *options;
   int num_options;
-   int num_annotations;
+
+  int num_annotations;
   const char *(*ann_labels)[3];
   int num_annotation_rows;
   const struct srd_c_ann_row *annotation_rows;
-   const char **inputs;
+
+  const char **inputs;
   int num_inputs;
   const char **outputs;
   int num_outputs;
@@ -400,18 +481,21 @@ typedef int (*srd_c_decoder_api_version_func)(void);
   int num_binary;
   const char **tags;
   int num_tags;
-   size_t state_size;  /* C_DECODER_STATE auto-sets this */
-   void (*reset)(struct srd_decoder_inst *di);
+
+  size_t state_size;  /* C_DECODER_STATE auto-sets this */
+
+  void (*reset)(struct srd_decoder_inst *di);
   void (*start)(struct srd_decoder_inst *di);
   void (*decode)(struct srd_decoder_inst *di);
   void (*end)(struct srd_decoder_inst *di);
   void (*metadata)(struct srd_decoder_inst *di, int key, uint64_t value);
   void (*destroy)(struct srd_decoder_inst *di);
   void (*decode_upper)(struct srd_decoder_inst *di,
-					   uint64_t start_sample, uint64_t end_sample,
-					   const char *cmd, const c_field *fields, int n_fields);
+                       uint64_t start_sample, uint64_t end_sample,
+                       const char *cmd, const c_field *fields, int n_fields);
 };
- struct srd_pd_output {
+
+struct srd_pd_output {
   int pdo_id;
   int output_type;
   struct srd_decoder_inst *di;
@@ -421,7 +505,8 @@ typedef int (*srd_c_decoder_api_version_func)(void);
   char *meta_name;
   char *meta_descr;
 };
- struct srd_proto_data {
+
+struct srd_proto_data {
   uint64_t start_sample;
   uint64_t end_sample;
   struct srd_pd_output *pdo;
@@ -431,7 +516,7 @@ struct srd_proto_data_annotation {
   int ann_class;
   int ann_type;
   char str_number_hex[DECODE_NUM_HEX_MAX_LEN]; // numerical value hex format
-											   // string
+                                               // string
   long long numberic_value;
   char **ann_text; // text string lines
 };
@@ -449,37 +534,44 @@ struct srd_proto_data_logic {
   int num_channels;
   const uint8_t *values;
 };
- typedef void (*srd_pd_output_callback)(struct srd_proto_data *pdata,
-									   void *cb_data);
- struct srd_pd_callback {
+
+typedef void (*srd_pd_output_callback)(struct srd_proto_data *pdata,
+                                       void *cb_data);
+
+struct srd_pd_callback {
   int output_type;
   srd_pd_output_callback cb;
   void *cb_data;
 };
- /* srd.c */
+
+/* srd.c */
 SRD_API int srd_init(const char *path);
 SRD_API int srd_exit(void);
 SRD_API GSList *srd_searchpaths_get(void);
 SRD_API void srd_set_python_home(const wchar_t *path);
- /* session.c */
+
+/* session.c */
 SRD_API int srd_session_new(struct srd_session **sess);
 SRD_API const GSList *srd_session_inst_list_get(const struct srd_session *sess);
+SRD_API const GSList *srd_session_callbacks_get(const struct srd_session *sess);
 SRD_API int srd_session_start(struct srd_session *sess, char **error);
 SRD_API int srd_session_metadata_set(struct srd_session *sess, int key,
-									 GVariant *data);
+                                     GVariant *data);
 SRD_API int srd_session_send(struct srd_session *sess,
-							 uint64_t abs_start_samplenum,
-							 uint64_t abs_end_samplenum, const uint8_t **inbuf,
-							 const uint8_t *inbuf_const, uint64_t inbuflen,
-							 char **error);
+                             uint64_t abs_start_samplenum,
+                             uint64_t abs_end_samplenum, const uint8_t **inbuf,
+                             const uint8_t *inbuf_const, uint64_t inbuflen,
+                             char **error);
 SRD_API int srd_session_terminate_reset(struct srd_session *sess);
 SRD_API int srd_session_destroy(struct srd_session *sess);
 SRD_API int srd_pd_output_callback_add(struct srd_session *sess,
-									   int output_type,
-									   srd_pd_output_callback cb,
-									   void *cb_data);
- SRD_API int srd_session_end(struct srd_session *sess, char **error);
- /* decoder.c */
+                                       int output_type,
+                                       srd_pd_output_callback cb,
+                                       void *cb_data);
+
+SRD_API int srd_session_end(struct srd_session *sess, char **error);
+
+/* decoder.c */
 SRD_API const GSList *srd_decoder_list(void);
 SRD_API struct srd_decoder *srd_decoder_get_by_id(const char *id);
 SRD_API int srd_decoder_load(const char *name);
@@ -487,21 +579,23 @@ SRD_API char *srd_decoder_doc_get(const struct srd_decoder *dec);
 SRD_API int srd_decoder_unload(struct srd_decoder *dec);
 SRD_API int srd_decoder_load_all(void);
 SRD_API int srd_decoder_unload_all(void);
- /* instance.c */
+
+/* instance.c */
 SRD_API int srd_inst_option_set(struct srd_decoder_inst *di,
-								GHashTable *options);
+                                GHashTable *options);
 SRD_API int srd_inst_channel_set_all(struct srd_decoder_inst *di,
-									 GHashTable *channels);
+                                     GHashTable *channels);
 SRD_API struct srd_decoder_inst *
 srd_inst_new(struct srd_session *sess, const char *id, GHashTable *options);
 SRD_API int srd_inst_stack(struct srd_session *sess,
-						   struct srd_decoder_inst *di_from,
-						   struct srd_decoder_inst *di_to);
+                           struct srd_decoder_inst *di_from,
+                           struct srd_decoder_inst *di_to);
 SRD_API struct srd_decoder_inst *srd_inst_find_by_id(struct srd_session *sess,
-													 const char *inst_id);
+                                                     const char *inst_id);
 SRD_API int srd_inst_initial_pins_set_all(struct srd_decoder_inst *di,
-										  GArray *initial_pins);
- /* log.c */
+                                          GArray *initial_pins);
+
+/* log.c */
 /*
  * Loglevels (restored from upstream for callback compatibility).
  * When xlog is used as the default backend, these map to xlog levels.
@@ -514,33 +608,44 @@ enum srd_loglevel {
 	SRD_LOG_DBG  = 4, /**< Output debug messages. */
 	SRD_LOG_SPEW = 5, /**< Output very noisy debug messages. */
 };
- /** Log callback function type (restored from upstream). */
+
+/** Log callback function type (restored from upstream). */
 typedef int (*srd_log_callback)(void *cb_data, int loglevel,
 				const char *format, va_list args);
- /** Use a shared xlog context, and drop the private log context. */
+
+/** Use a shared xlog context, and drop the private log context. */
 SRD_API void srd_log_set_context(xlog_context *ctx);
- /** Set the log level (maps to both xlog and callback levels). */
+
+/** Set the log level (maps to both xlog and callback levels). */
 SRD_API int srd_log_loglevel_set(int loglevel);
- /** Get the current log level. */
+
+/** Get the current log level. */
 SRD_API int srd_log_loglevel_get(void);
- /** Set a custom log callback (overrides xlog default). */
+
+/** Set a custom log callback (overrides xlog default). */
 SRD_API int srd_log_callback_set(srd_log_callback cb, void *cb_data);
- /** Get the current log callback and its data. */
+
+/** Get the current log callback and its data. */
 SRD_API int srd_log_callback_get(srd_log_callback *cb, void **cb_data);
- /** Restore the default log callback (xlog backend). */
+
+/** Restore the default log callback (xlog backend). */
 SRD_API int srd_log_callback_set_default(void);
- /* error.c — last-error API (alternative to char **error) */
+
+/* error.c — last-error API (alternative to char **error) */
 /** Get the last error message (thread-local). Returns NULL if no error. */
 SRD_API const char *srd_get_last_error(void);
 /** Clear the last error message (thread-local). */
 SRD_API void srd_clear_last_error(void);
- /* error.c */
+
+/* error.c */
 SRD_API const char *srd_strerror(int error_code);
 SRD_API const char *srd_strerror_name(int error_code);
- /* buildinfo (restored from upstream) */
+
+/* buildinfo (restored from upstream) */
 SRD_API GSList *srd_buildinfo_libs_get(void);
 SRD_API char *srd_buildinfo_host_get(void);
- /* version.c */
+
+/* version.c */
 SRD_API int srd_package_version_major_get(void);
 SRD_API int srd_package_version_minor_get(void);
 SRD_API int srd_package_version_micro_get(void);
@@ -549,7 +654,8 @@ SRD_API int srd_lib_version_current_get(void);
 SRD_API int srd_lib_version_revision_get(void);
 SRD_API int srd_lib_version_age_get(void);
 SRD_API const char *srd_lib_version_string_get(void);
- SRD_API int srd_c_decoder_register(struct srd_c_decoder *dec);
+
+SRD_API int srd_c_decoder_register(struct srd_c_decoder *dec);
 SRD_API int srd_c_decoder_load_all(void);
 SRD_API int srd_c_decoder_path_set(const char *path);
 SRD_API int srd_c_decoder_path_add(const char *path);
@@ -559,87 +665,98 @@ SRD_API int srd_c_decoder_unload(const char *decoder_id);
 SRD_API const GSList *srd_c_dll_registry_get(void);
 SRD_API const struct srd_c_dll_entry *
 srd_c_dll_info_get(const char *decoder_id);
- struct srd_c_annotation {
+
+struct srd_c_annotation {
   int ann_class;
   int ann_type;
   char **ann_text;
   char str_number_hex[DECODE_NUM_HEX_MAX_LEN];
   long long numberic_value;
 };
- SRD_API int c_decoder_put(struct srd_decoder_inst *di, uint64_t start_sample,
-						  uint64_t end_sample, int output_id,
-						  struct srd_c_annotation *ann);
+
+SRD_API int c_decoder_put(struct srd_decoder_inst *di, uint64_t start_sample,
+                          uint64_t end_sample, int output_id,
+                          struct srd_c_annotation *ann);
 SRD_API int c_decoder_put_binary(struct srd_decoder_inst *di,
-								 uint64_t start_sample, uint64_t end_sample,
-								 int output_id, int bin_class, uint64_t size,
-								 const unsigned char *data);
+                                 uint64_t start_sample, uint64_t end_sample,
+                                 int output_id, int bin_class, uint64_t size,
+                                 const unsigned char *data);
 SRD_API int c_decoder_put_logic(struct srd_decoder_inst *di,
-								uint64_t start_sample, uint64_t end_sample,
-								int output_id, uint32_t channel_mask,
-								const uint8_t *values, int num_channels);
+                                uint64_t start_sample, uint64_t end_sample,
+                                int output_id, uint32_t channel_mask,
+                                const uint8_t *values, int num_channels);
 SRD_API int c_decoder_wait(struct srd_decoder_inst *di, GSList *condition_list,
-						   uint64_t *samplenum, uint64_t *matched);
+                           uint64_t *samplenum, uint64_t *matched);
 SRD_API int c_decoder_has_channel(struct srd_decoder_inst *di, int ch);
 SRD_API int c_decoder_register_output(struct srd_decoder_inst *di,
-									  int output_type, const char *proto_id);
+                                      int output_type, const char *proto_id);
 SRD_API int
 c_decoder_register_output_meta(struct srd_decoder_inst *di, int output_type,
-							   const char *proto_id, const char *meta_type,
-							   const char *meta_name, const char *meta_descr);
+                               const char *proto_id, const char *meta_type,
+                               const char *meta_name, const char *meta_descr);
 SRD_API int c_decoder_put_meta_int(struct srd_decoder_inst *di,
-								   uint64_t start_sample, uint64_t end_sample,
-								   int output_id, int64_t value);
+                                   uint64_t start_sample, uint64_t end_sample,
+                                   int output_id, int64_t value);
 SRD_API int c_decoder_put_meta_double(struct srd_decoder_inst *di,
-									  uint64_t start_sample,
-									  uint64_t end_sample, int output_id,
-									  double value);
+                                      uint64_t start_sample,
+                                      uint64_t end_sample, int output_id,
+                                      double value);
 SRD_API uint64_t c_decoder_get_samplerate(struct srd_decoder_inst *di);
 SRD_API uint64_t c_decoder_get_last_samplenum(struct srd_decoder_inst *di);
 SRD_API int64_t c_decoder_get_option_int(struct srd_decoder_inst *di,
-										 const char *key, int64_t defval);
+                                         const char *key, int64_t defval);
 SRD_API double c_decoder_get_option_double(struct srd_decoder_inst *di,
-										   const char *key, double defval);
+                                           const char *key, double defval);
 SRD_API const char *c_decoder_get_option_string(struct srd_decoder_inst *di,
-												const char *key,
-												const char *defval);
+                                                const char *key,
+                                                const char *defval);
 SRD_API void *c_decoder_get_private(struct srd_decoder_inst *di);
 SRD_API void c_decoder_set_private(struct srd_decoder_inst *di, void *data);
- #define C_ANN_PUT(di, ss, es, out_id, cls, ...)                                \
+
+#define C_ANN_PUT(di, ss, es, out_id, cls, ...)                                \
   do {                                                                         \
-	const char *_txts[] = {__VA_ARGS__, NULL};                                 \
-	struct srd_c_annotation _ann = {cls, 0, (char **)_txts, "", 0};            \
-	c_decoder_put(di, ss, es, out_id, &_ann);                                  \
+    const char *_txts[] = {__VA_ARGS__, NULL};                                 \
+    struct srd_c_annotation _ann = {cls, 0, (char **)_txts, "", 0};            \
+    c_decoder_put(di, ss, es, out_id, &_ann);                                  \
   } while (0)
- #define C_ANN_PUT_TYPE(di, ss, es, out_id, cls, tp, ...)                       \
+
+#define C_ANN_PUT_TYPE(di, ss, es, out_id, cls, tp, ...)                       \
   do {                                                                         \
-	const char *_txts[] = {__VA_ARGS__, NULL};                                 \
-	struct srd_c_annotation _ann = {cls, tp, (char **)_txts, "", 0};           \
-	c_decoder_put(di, ss, es, out_id, &_ann);                                  \
+    const char *_txts[] = {__VA_ARGS__, NULL};                                 \
+    struct srd_c_annotation _ann = {cls, tp, (char **)_txts, "", 0};           \
+    c_decoder_put(di, ss, es, out_id, &_ann);                                  \
   } while (0)
- #define C_ANN_PUT_VAL(di, ss, es, out_id, cls, val, ...)                       \
+
+#define C_ANN_PUT_VAL(di, ss, es, out_id, cls, val, ...)                       \
   do {                                                                         \
-	const char *_txts[] = {__VA_ARGS__, NULL};                                 \
-	struct srd_c_annotation _ann = {cls, 0, (char **)_txts, "",                \
-									(long long)(val)};                         \
-	snprintf(_ann.str_number_hex, DECODE_NUM_HEX_MAX_LEN, "0x%X",              \
-			 (unsigned int)(val));                                             \
-	c_decoder_put(di, ss, es, out_id, &_ann);                                  \
+    const char *_txts[] = {__VA_ARGS__, NULL};                                 \
+    struct srd_c_annotation _ann = {cls, 0, (char **)_txts, "",                \
+                                    (long long)(val)};                         \
+    snprintf(_ann.str_number_hex, DECODE_NUM_HEX_MAX_LEN, "0x%X",              \
+             (unsigned int)(val));                                             \
+    c_decoder_put(di, ss, es, out_id, &_ann);                                  \
   } while (0)
- /* v4 convenience aliases for annotation output */
+
+/* v4 convenience aliases for annotation output */
 #define c_put(di, ss, es, out_id, cls, ...)    C_ANN_PUT(di, ss, es, out_id, cls, __VA_ARGS__)
 #define c_put_v(di, ss, es, out_id, cls, val, ...) C_ANN_PUT_VAL(di, ss, es, out_id, cls, val, __VA_ARGS__)
 #define c_put_t(di, ss, es, out_id, cls, tp, ...)  C_ANN_PUT_TYPE(di, ss, es, out_id, cls, tp, __VA_ARGS__)
- /* v4 variadic declarative condition wait — replaces c_cond_* builder pattern */
+
+/* v4 variadic declarative condition wait — replaces c_cond_* builder pattern */
 SRD_API int c_wait(struct srd_decoder_inst *di, ...);
- /* v4 pin access — replaces c_decoder_get_pin */
+
+/* v4 pin access — replaces c_decoder_get_pin */
 SRD_API uint8_t c_pin(struct srd_decoder_inst *di, int ch);
- /* v4 structured protocol output — replaces c_decoder_put_proto */
+
+/* v4 structured protocol output — replaces c_decoder_put_proto */
 SRD_API int c_proto(struct srd_decoder_inst *di, uint64_t start_sample,
-					uint64_t end_sample, int output_id,
-					const char *cmd, ...);  /* C_END-terminated c_field args */
- /* v4 boolean option — replaces string comparison pattern */
+                    uint64_t end_sample, int output_id,
+                    const char *cmd, ...);  /* C_END-terminated c_field args */
+
+/* v4 boolean option — replaces string comparison pattern */
 SRD_API int c_opt_bool(struct srd_decoder_inst *di, const char *key, int defval);
- /* v4 shortcut API aliases — shorter names for common operations */
+
+/* v4 shortcut API aliases — shorter names for common operations */
 #define c_opt_int    c_decoder_get_option_int
 #define c_opt_str    c_decoder_get_option_string
 #define c_opt_dbl    c_decoder_get_option_double
@@ -653,32 +770,38 @@ SRD_API int c_opt_bool(struct srd_decoder_inst *di, const char *key, int defval)
 #define c_put_logic  c_decoder_put_logic
 #define c_put_meta_int c_decoder_put_meta_int
 #define c_put_meta_dbl c_decoder_put_meta_double
- /* C_DECODER_STATE — auto-generates state struct, reset, and destroy */
+
+/* C_DECODER_STATE — auto-generates state struct, reset, and destroy */
 #define C_DECODER_STATE(name, fields) \
-	typedef struct name##_s fields name##_s; \
-	static void name##_reset(struct srd_decoder_inst *di) { \
-		name##_s *s = (name##_s *)calloc(1, sizeof(name##_s)); \
-		c_decoder_set_private(di, s); \
-	} \
-	static void name##_destroy(struct srd_decoder_inst *di) { \
-		void *p = c_decoder_get_private(di); \
-		free(p); \
-		c_decoder_set_private(di, NULL); \
-	}
- /* C_DECODER_DEFINE — auto-generates decoder struct and DLL entry */
+    typedef struct name##_s fields name##_s; \
+    static void name##_reset(struct srd_decoder_inst *di) { \
+        name##_s *s = (name##_s *)calloc(1, sizeof(name##_s)); \
+        c_decoder_set_private(di, s); \
+    } \
+    static void name##_destroy(struct srd_decoder_inst *di) { \
+        void *p = c_decoder_get_private(di); \
+        free(p); \
+        c_decoder_set_private(di, NULL); \
+    }
+
+/* C_DECODER_DEFINE — auto-generates decoder struct and DLL entry */
 #define C_DECODER_DEFINE(dec_name, ...) \
-	static struct srd_c_decoder dec_name##_def = { \
-		__VA_ARGS__ \
-	}; \
-	SRD_C_DECODER_EXPORT struct srd_c_decoder *srd_c_decoder_entry(void) { \
-		return &dec_name##_def; \
-	} \
-	SRD_C_DECODER_EXPORT int srd_c_decoder_api_version(void) { \
-		return SRD_C_DECODER_API_VERSION; \
-	}
- SRD_API uint8_t c_decoder_get_initial_pin(struct srd_decoder_inst *di, int ch);
- #include "version.h"
- #ifdef __cplusplus
+    static struct srd_c_decoder dec_name##_def = { \
+        __VA_ARGS__ \
+    }; \
+    SRD_C_DECODER_EXPORT struct srd_c_decoder *srd_c_decoder_entry(void) { \
+        return &dec_name##_def; \
+    } \
+    SRD_C_DECODER_EXPORT int srd_c_decoder_api_version(void) { \
+        return SRD_C_DECODER_API_VERSION; \
+    }
+
+SRD_API uint8_t c_decoder_get_initial_pin(struct srd_decoder_inst *di, int ch);
+
+#include "version.h"
+
+#ifdef __cplusplus
 }
 #endif
- #endif
+
+#endif
