@@ -17,39 +17,31 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-
-#include "config.h"
+ #include "config.h"
 #include "libsigrokdecode-internal.h" /* First, so we avoid a _POSIX_C_SOURCE warning. */
 #include "libsigrokdecode.h"
 #include "log.h"
 #include <glib.h>
 #include <inttypes.h>
-
-SRD_PRIV int srd_call_sub_decoder_end(struct srd_decoder_inst* di, char** error);
-
-/**
+ SRD_PRIV int srd_call_sub_decoder_end(struct srd_decoder_inst* di, char** error);
+ /**
  * @file
  *
  * Session handling.
  */
-
-/**
+ /**
  * @defgroup grp_session Session handling
  *
  * Starting and handling decoding sessions.
  *
  * @{
  */
-
-/** @cond PRIVATE */
-
-SRD_PRIV GSList* sessions = NULL;
+ /** @cond PRIVATE */
+ SRD_PRIV GSList* sessions = NULL;
 SRD_PRIV int max_session_id = -1;
 SRD_PRIV GRWLock sessions_rwlock;
-
-/** @endcond */
-
-/**
+ /** @endcond */
+ /**
  * Create a decoding session.
  *
  * A session holds all decoder instances, their stack relationships and
@@ -65,30 +57,22 @@ SRD_PRIV GRWLock sessions_rwlock;
 SRD_API int srd_session_new(struct srd_session** sess)
 {
 struct srd_session* se = NULL;
-
-if (!sess)
+ if (!sess)
 return SRD_ERR_ARG;
-
-se = g_malloc0(sizeof(struct srd_session));
+ se = g_malloc0(sizeof(struct srd_session));
 if (se == NULL) {
 srd_err("%s,ERROR:failed to alloc memory.", __func__);
 return SRD_ERR;
 }
-
-se->session_id = ++max_session_id;
-
-g_rw_lock_writer_lock(&sessions_rwlock);
+ se->session_id = ++max_session_id;
+ g_rw_lock_writer_lock(&sessions_rwlock);
 sessions = g_slist_append(sessions, se);
 g_rw_lock_writer_unlock(&sessions_rwlock);
-
-*sess = se;
-
-// srd_info("Creating session %d.", (*sess)->session_id);
-
-return SRD_OK;
+ *sess = se;
+ // srd_info("Creating session %d.", (*sess)->session_id);
+ return SRD_OK;
 }
-
-/**
+ /**
  * Get the list of decoder instances in a session.
  *
  * @param sess The session. Must not be NULL.
@@ -101,12 +85,11 @@ return SRD_OK;
  */
 SRD_API const GSList* srd_session_inst_list_get(const struct srd_session* sess)
 {
-    if (!sess)
-        return NULL;
-    return sess->di_list;
+	if (!sess)
+		return NULL;
+	return sess->di_list;
 }
-
-/**
+ /**
  * Start a decoding session.
  *
  * Decoders, instances and stack must have been prepared beforehand,
@@ -120,49 +103,39 @@ SRD_API const GSList* srd_session_inst_list_get(const struct srd_session* sess)
  */
 SRD_API int srd_session_start(struct srd_session* sess, char** error)
 {
-    GSList* d;
-    struct srd_decoder_inst* di;
-    int ret;
-
-    if (!sess)
-        return SRD_ERR_ARG;
-
-    srd_info("Calling start() of all instances in session %d.", sess->session_id);
-
-    /* Run the start() method of all decoders receiving frontend data. */
-    ret = SRD_OK;
-    for (d = sess->di_list; d; d = d->next) {
-        di = d->data;
-        if ((ret = srd_inst_start(di, error)) != SRD_OK)
-            break;
-    }
-
-    return ret;
+	GSList* d;
+	struct srd_decoder_inst* di;
+	int ret;
+ 	if (!sess)
+		return SRD_ERR_ARG;
+ 	srd_info("Calling start() of all instances in session %d.", sess->session_id);
+ 	/* Run the start() method of all decoders receiving frontend data. */
+	ret = SRD_OK;
+	for (d = sess->di_list; d; d = d->next) {
+		di = d->data;
+		if ((ret = srd_inst_start(di, error)) != SRD_OK)
+			break;
+	}
+ 	return ret;
 }
-
-static int srd_inst_send_meta(struct srd_decoder_inst* di, int key,
-    GVariant* data)
+ static int srd_inst_send_meta(struct srd_decoder_inst* di, int key,
+	GVariant* data)
 {
-    GSList* l;
-    struct srd_decoder_inst* next_di;
-    int ret;
-
-    if (key != SRD_CONF_SAMPLERATE)
-        return SRD_OK;
-
-    /* Dispatch metadata to C or Python via vtable */
-    srd_di_ops(di)->call_metadata(di, key, data ? g_variant_get_uint64(data) : 0);
-
-    for (l = di->next_di; l; l = l->next) {
-        next_di = l->data;
-        if ((ret = srd_inst_send_meta(next_di, key, data)) != SRD_OK)
-            return ret;
-    }
-
-    return SRD_OK;
+	GSList* l;
+	struct srd_decoder_inst* next_di;
+	int ret;
+ 	if (key != SRD_CONF_SAMPLERATE)
+		return SRD_OK;
+ 	/* Dispatch metadata to C or Python via vtable */
+	srd_di_ops(di)->call_metadata(di, key, data ? g_variant_get_uint64(data) : 0);
+ 	for (l = di->next_di; l; l = l->next) {
+		next_di = l->data;
+		if ((ret = srd_inst_send_meta(next_di, key, data)) != SRD_OK)
+			return ret;
+	}
+ 	return SRD_OK;
 }
-
-/**
+ /**
  * Set a metadata configuration key in a session.
  *
  * @param sess The session to configure. Must not be NULL.
@@ -176,51 +149,41 @@ static int srd_inst_send_meta(struct srd_decoder_inst* di, int key,
  * @since 0.3.0
  */
 SRD_API int srd_session_metadata_set(struct srd_session* sess, int key,
-    GVariant* data)
+	GVariant* data)
 {
-    GSList* l;
-    int ret;
-
-    if (!sess)
-        return SRD_ERR_ARG;
-
-    if (!key) {
-        srd_err("Invalid key.");
-        return SRD_ERR_ARG;
-    }
-
-    if (!data) {
-        srd_err("Invalid value.");
-        return SRD_ERR_ARG;
-    }
-
-    /* Hardcoded to samplerate/uint64 for now. */
-
-    if (key != SRD_CONF_SAMPLERATE) {
-        srd_err("Unknown config key %d.", key);
-        return SRD_ERR_ARG;
-    }
-    if (!g_variant_is_of_type(data, G_VARIANT_TYPE_UINT64)) {
-        srd_err("Invalid value type: expected uint64, got %s",
-            g_variant_get_type_string(data));
-        return SRD_ERR_ARG;
-    }
-
-    srd_dbg("Setting session %d samplerate to %" G_GUINT64_FORMAT ".",
-        sess->session_id, g_variant_get_uint64(data));
-
-    ret = SRD_OK;
-    for (l = sess->di_list; l; l = l->next) {
-        if ((ret = srd_inst_send_meta(l->data, key, data)) != SRD_OK)
-            break;
-    }
-
-    g_variant_unref(data);
-
-    return ret;
+	GSList* l;
+	int ret;
+ 	if (!sess)
+		return SRD_ERR_ARG;
+ 	if (!key) {
+		srd_err("Invalid key.");
+		return SRD_ERR_ARG;
+	}
+ 	if (!data) {
+		srd_err("Invalid value.");
+		return SRD_ERR_ARG;
+	}
+ 	/* Hardcoded to samplerate/uint64 for now. */
+ 	if (key != SRD_CONF_SAMPLERATE) {
+		srd_err("Unknown config key %d.", key);
+		return SRD_ERR_ARG;
+	}
+	if (!g_variant_is_of_type(data, G_VARIANT_TYPE_UINT64)) {
+		srd_err("Invalid value type: expected uint64, got %s",
+			g_variant_get_type_string(data));
+		return SRD_ERR_ARG;
+	}
+ 	srd_dbg("Setting session %d samplerate to %" G_GUINT64_FORMAT ".",
+		sess->session_id, g_variant_get_uint64(data));
+ 	ret = SRD_OK;
+	for (l = sess->di_list; l; l = l->next) {
+		if ((ret = srd_inst_send_meta(l->data, key, data)) != SRD_OK)
+			break;
+	}
+ 	g_variant_unref(data);
+ 	return ret;
 }
-
-/**
+ /**
  * Send a chunk of logic sample data to a running decoder session.
  *
  * If no channel map has been set up, the logic samples must be arranged
@@ -279,27 +242,23 @@ SRD_API int srd_session_metadata_set(struct srd_session* sess, int key,
  * @since 0.4.0
  */
 SRD_API int srd_session_send(struct srd_session* sess,
-    uint64_t abs_start_samplenum, uint64_t abs_end_samplenum,
-    const uint8_t** inbuf, const uint8_t* inbuf_const, uint64_t inbuflen, char** error)
+	uint64_t abs_start_samplenum, uint64_t abs_end_samplenum,
+	const uint8_t** inbuf, const uint8_t* inbuf_const, uint64_t inbuflen, char** error)
 {
-    GSList* d;
-    int ret;
-
-    if (!sess)
-        return SRD_ERR_ARG;
-
-    // foreach srd_decoder_inst* stack
-    for (d = sess->di_list; d; d = d->next) {
-        if ((ret = srd_inst_decode(d->data, abs_start_samplenum,
-                 abs_end_samplenum, inbuf, inbuf_const, inbuflen, error))
-            != SRD_OK)
-            return ret;
-    }
-
-    return SRD_OK;
+	GSList* d;
+	int ret;
+ 	if (!sess)
+		return SRD_ERR_ARG;
+ 	// foreach srd_decoder_inst* stack
+	for (d = sess->di_list; d; d = d->next) {
+		if ((ret = srd_inst_decode(d->data, abs_start_samplenum,
+				 abs_end_samplenum, inbuf, inbuf_const, inbuflen, error))
+			!= SRD_OK)
+			return ret;
+	}
+ 	return SRD_OK;
 }
-
-/**
+ /**
  * Terminate currently executing decoders in a session, reset internal state.
  *
  * All decoder instances have their .wait() method terminated, which
@@ -323,22 +282,18 @@ SRD_API int srd_session_send(struct srd_session* sess,
  */
 SRD_API int srd_session_terminate_reset(struct srd_session* sess)
 {
-    GSList* d;
-    int ret;
-
-    if (!sess)
-        return SRD_ERR_ARG;
-
-    for (d = sess->di_list; d; d = d->next) {
-        ret = srd_inst_terminate_reset(d->data);
-        if (ret != SRD_OK)
-            return ret;
-    }
-
-    return SRD_OK;
+	GSList* d;
+	int ret;
+ 	if (!sess)
+		return SRD_ERR_ARG;
+ 	for (d = sess->di_list; d; d = d->next) {
+		ret = srd_inst_terminate_reset(d->data);
+		if (ret != SRD_OK)
+			return ret;
+	}
+ 	return SRD_OK;
 }
-
-/**
+ /**
  * Destroy a decoding session.
  *
  * All decoder instances and output callbacks are properly released.
@@ -352,28 +307,21 @@ SRD_API int srd_session_terminate_reset(struct srd_session* sess)
 SRD_API int srd_session_destroy(struct srd_session *sess)
 {
 	int session_id;
-
-	if (!sess)
+ 	if (!sess)
 		return SRD_ERR_ARG;
-
-	session_id = sess->session_id;
-
-	g_rw_lock_writer_lock(&sessions_rwlock);
+ 	session_id = sess->session_id;
+ 	g_rw_lock_writer_lock(&sessions_rwlock);
 	sessions = g_slist_remove(sessions, sess);
 	g_rw_lock_writer_unlock(&sessions_rwlock);
-
-	if (sess->di_list)
+ 	if (sess->di_list)
 		srd_inst_free_all(sess);
 	if (sess->callbacks)
 		g_slist_free_full(sess->callbacks, g_free);
 	g_free(sess);
-
-	srd_info("Destroyed session %d.", session_id);
-
-	return SRD_OK;
+ 	srd_info("Destroyed session %d.", session_id);
+ 	return SRD_OK;
 }
-
-/**
+ /**
  * Register/add a decoder output callback function.
  *
  * The function will be called when a protocol decoder sends output back
@@ -390,103 +338,81 @@ SRD_API int srd_session_destroy(struct srd_session *sess)
  * @since 0.3.0
  */
 SRD_API int srd_pd_output_callback_add(struct srd_session* sess,
-    int output_type, srd_pd_output_callback cb, void* cb_data)
+	int output_type, srd_pd_output_callback cb, void* cb_data)
 {
-    struct srd_pd_callback* pd_cb;
-
-    if (!sess)
-        return SRD_ERR_ARG;
-
-    srd_dbg("Registering new callback for output type %s.",
-        output_type_name(output_type));
-
-    pd_cb = g_malloc0(sizeof(struct srd_pd_callback));
-    if (pd_cb == NULL) {
-        srd_err("%s,ERROR:failed to alloc memory.", __func__);
-        return SRD_ERR;
-    }
-
-    pd_cb->output_type = output_type;
-    pd_cb->cb = cb;
-    pd_cb->cb_data = cb_data;
-    sess->callbacks = g_slist_append(sess->callbacks, pd_cb);
-
-    return SRD_OK;
+	struct srd_pd_callback* pd_cb;
+ 	if (!sess)
+		return SRD_ERR_ARG;
+ 	srd_dbg("Registering new callback for output type %s.",
+		output_type_name(output_type));
+ 	pd_cb = g_malloc0(sizeof(struct srd_pd_callback));
+	if (pd_cb == NULL) {
+		srd_err("%s,ERROR:failed to alloc memory.", __func__);
+		return SRD_ERR;
+	}
+ 	pd_cb->output_type = output_type;
+	pd_cb->cb = cb;
+	pd_cb->cb_data = cb_data;
+	sess->callbacks = g_slist_append(sess->callbacks, pd_cb);
+ 	return SRD_OK;
 }
-
-/** @private */
+ /** @private */
 SRD_PRIV struct srd_pd_callback* srd_pd_output_callback_find(
-    struct srd_session* sess, int output_type)
+	struct srd_session* sess, int output_type)
 {
-    GSList* l;
-    struct srd_pd_callback *tmp, *pd_cb;
-
-    if (!sess)
-        return NULL;
-
-    pd_cb = NULL;
-    for (l = sess->callbacks; l; l = l->next) {
-        tmp = l->data;
-        if (tmp->output_type == output_type) {
-            pd_cb = tmp;
-            break;
-        }
-    }
-
-    return pd_cb;
+	GSList* l;
+	struct srd_pd_callback *tmp, *pd_cb;
+ 	if (!sess)
+		return NULL;
+ 	pd_cb = NULL;
+	for (l = sess->callbacks; l; l = l->next) {
+		tmp = l->data;
+		if (tmp->output_type == output_type) {
+			pd_cb = tmp;
+			break;
+		}
+	}
+ 	return pd_cb;
 }
-
-SRD_API int srd_session_end(struct srd_session* sess, char** error)
+ SRD_API int srd_session_end(struct srd_session* sess, char** error)
 {
-    GSList* d;
-    struct srd_decoder_inst* di;
-    int ret;
-
-    if (!sess || !sess->di_list) {
-        return SRD_ERR;
-    }
-
-    for (d = sess->di_list; d; d = d->next) {
-        di = d->data;
-
-        /* Call end() via vtable (handles both C and Python) */
-        ret = srd_di_ops(di)->call_end(di, error);
-        if (ret != SRD_OK)
-            return ret;
-
-        if (di->next_di != NULL) {
-            ret = srd_call_sub_decoder_end(di, error);
-            if (ret != SRD_OK)
-                return ret;
-        }
-    }
-
-    return SRD_OK;
+	GSList* d;
+	struct srd_decoder_inst* di;
+	int ret;
+ 	if (!sess || !sess->di_list) {
+		return SRD_ERR;
+	}
+ 	for (d = sess->di_list; d; d = d->next) {
+		di = d->data;
+ 		/* Call end() via vtable (handles both C and Python) */
+		ret = srd_di_ops(di)->call_end(di, error);
+		if (ret != SRD_OK)
+			return ret;
+ 		if (di->next_di != NULL) {
+			ret = srd_call_sub_decoder_end(di, error);
+			if (ret != SRD_OK)
+				return ret;
+		}
+	}
+ 	return SRD_OK;
 }
-
-SRD_PRIV int srd_call_sub_decoder_end(struct srd_decoder_inst* di, char** error)
+ SRD_PRIV int srd_call_sub_decoder_end(struct srd_decoder_inst* di, char** error)
 {
-    assert(di && di->next_di);
-
-    GSList* l;
-    struct srd_decoder_inst* sub_dec;
-    int ret;
-
-    for (l = di->next_di; l; l = l->next) {
-        sub_dec = l->data;
-
-        /* Call end() via vtable (handles both C and Python) */
-        ret = srd_di_ops(sub_dec)->call_end(sub_dec, error);
-        if (ret != SRD_OK)
-            return ret;
-
-        if (sub_dec->next_di != NULL) {
-            if (srd_call_sub_decoder_end(sub_dec, error) != SRD_OK)
-                return SRD_ERR_PYTHON;
-        }
-    }
-
-    return SRD_OK;
+	assert(di && di->next_di);
+ 	GSList* l;
+	struct srd_decoder_inst* sub_dec;
+	int ret;
+ 	for (l = di->next_di; l; l = l->next) {
+		sub_dec = l->data;
+ 		/* Call end() via vtable (handles both C and Python) */
+		ret = srd_di_ops(sub_dec)->call_end(sub_dec, error);
+		if (ret != SRD_OK)
+			return ret;
+ 		if (sub_dec->next_di != NULL) {
+			if (srd_call_sub_decoder_end(sub_dec, error) != SRD_OK)
+				return SRD_ERR_PYTHON;
+		}
+	}
+ 	return SRD_OK;
 }
-
-/** @} */
+ /** @} */

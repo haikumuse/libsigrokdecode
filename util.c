@@ -17,12 +17,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-
-#include "config.h"
+ #include "config.h"
 #include "libsigrokdecode-internal.h" /* First, so we avoid a _POSIX_C_SOURCE warning. */
 #include "log.h"
-
-/**
+ /**
  * Import a Python module by name.
  *
  * This function is implemented in terms of PyImport_Import() rather than
@@ -38,24 +36,18 @@ SRD_PRIV PyObject *py_import_by_name(const char *name)
 {
 	PyObject *py_mod, *py_modname;
 	PyGILState_STATE gstate;
-
-	gstate = PyGILState_Ensure();
-  
-	py_modname = PyUnicode_FromString(name);
+ 	gstate = PyGILState_Ensure();
+   	py_modname = PyUnicode_FromString(name);
 	if (!py_modname) {
 		PyGILState_Release(gstate);
 		return NULL;
 	} 
- 
-	py_mod = PyImport_Import(py_modname);
+  	py_mod = PyImport_Import(py_modname);
 	Py_DECREF(py_modname);
-
-	PyGILState_Release(gstate);
-
-	return py_mod;
+ 	PyGILState_Release(gstate);
+ 	return py_mod;
 }
-
-/**
+ /**
  * Get the value of a Python object's attribute, returned as a newly
  * allocated char *.
  *
@@ -73,33 +65,24 @@ SRD_PRIV int py_attr_as_str(PyObject *py_obj, const char *attr, char **outstr)
 	PyObject *py_str;
 	int ret;
 	PyGILState_STATE gstate;
-
-	gstate = PyGILState_Ensure();
-
-	if (!PyObject_HasAttrString(py_obj, attr)) {
+ 	gstate = PyGILState_Ensure();
+ 	if (!PyObject_HasAttrString(py_obj, attr)) {
 		srd_dbg("Object has no attribute '%s'.", attr);
 		goto err;
 	}
-
-	if (!(py_str = PyObject_GetAttrString(py_obj, attr))) {
-        srd_exception_catch(NULL, "Failed to get attribute '%s'", attr);
+ 	if (!(py_str = PyObject_GetAttrString(py_obj, attr))) {
+		srd_exception_catch(NULL, "Failed to get attribute '%s'", attr);
 		goto err;
 	}
-
-	ret = py_str_as_str(py_str, outstr);
+ 	ret = py_str_as_str(py_str, outstr);
 	Py_DECREF(py_str);
-
+ 	PyGILState_Release(gstate);
+ 	return ret;
+ err:
 	PyGILState_Release(gstate);
-
-	return ret;
-
-err:
-	PyGILState_Release(gstate);
-
-	return SRD_ERR_PYTHON;
+ 	return SRD_ERR_PYTHON;
 }
-
-/**
+ /**
  * Get the value of a Python object's attribute, returned as a newly
  * allocated GSList of char *.
  *
@@ -116,52 +99,40 @@ err:
 SRD_PRIV int py_attr_as_strlist(PyObject *py_obj, const char *attr, GSList **outstrlist)
 {
 	PyObject *py_list;
-    int i;
+	int i;
 	int ret;
 	char *outstr;
 	PyGILState_STATE gstate;
-
-	gstate = PyGILState_Ensure();
-
-	if (!PyObject_HasAttrString(py_obj, attr)) {
+ 	gstate = PyGILState_Ensure();
+ 	if (!PyObject_HasAttrString(py_obj, attr)) {
 		srd_dbg("Object has no attribute '%s'.", attr);
 		goto err;
 	}
-
-	if (!(py_list = PyObject_GetAttrString(py_obj, attr))) {
-        srd_exception_catch(NULL, "Failed to get attribute '%s'", attr);
+ 	if (!(py_list = PyObject_GetAttrString(py_obj, attr))) {
+		srd_exception_catch(NULL, "Failed to get attribute '%s'", attr);
 		goto err;
 	}
-
-	if (!PyList_Check(py_list)) {
+ 	if (!PyList_Check(py_list)) {
 		srd_dbg("Object is not a list.");
 		goto err;
 	}
-
-	*outstrlist = NULL;
-
-	for (i = 0; i < PyList_Size(py_list); i++) {
+ 	*outstrlist = NULL;
+ 	for (i = 0; i < PyList_Size(py_list); i++) {
 		ret = py_listitem_as_str(py_list, i, &outstr);
 		if (ret < 0) {
-            srd_dbg("Couldn't get item %d.", i);
+			srd_dbg("Couldn't get item %d.", i);
 			goto err;
 		}
 		*outstrlist = g_slist_append(*outstrlist, outstr);
 	}
-
-	Py_DECREF(py_list);
-
+ 	Py_DECREF(py_list);
+ 	PyGILState_Release(gstate);
+ 	return SRD_OK;
+ err:
 	PyGILState_Release(gstate);
-
-	return SRD_OK;
-
-err:
-	PyGILState_Release(gstate);
-
-	return SRD_ERR_PYTHON;
+ 	return SRD_ERR_PYTHON;
 }
-
-/**
+ /**
  * Get the value of a Python dictionary item, returned as a newly
  * allocated char *.
  *
@@ -179,29 +150,21 @@ SRD_PRIV int py_dictitem_as_str(PyObject *py_obj, const char *key,
 {
 	PyObject *py_value;
 	PyGILState_STATE gstate;
-
-	gstate = PyGILState_Ensure();
-
-	if (!PyDict_Check(py_obj)) {
+ 	gstate = PyGILState_Ensure();
+ 	if (!PyDict_Check(py_obj)) {
 		srd_dbg("Object is not a dictionary.");
 		goto err;
 	}
-
-	if (!(py_value = PyDict_GetItemString(py_obj, key))) {
+ 	if (!(py_value = PyDict_GetItemString(py_obj, key))) {
 		goto err;
 	}
-
+ 	PyGILState_Release(gstate);
+ 	return py_str_as_str(py_value, outstr);
+ err:
 	PyGILState_Release(gstate);
-
-	return py_str_as_str(py_value, outstr);
-
-err:
-	PyGILState_Release(gstate);
-
-	return SRD_ERR_PYTHON;
+ 	return SRD_ERR_PYTHON;
 }
-
-/**
+ /**
  * Get the value of a Python dictionary item, returned as a int.
  *
  * @param[in] py_obj The dictionary to probe.
@@ -213,30 +176,24 @@ err:
  */
 SRD_PRIV int py_dictitem_to_int(PyObject *py_obj, const char *key)
 {
-    PyObject *py_value;
-    long type;
-    PyGILState_STATE gstate;
-
-    gstate = PyGILState_Ensure();
-
-    if (!PyDict_Check(py_obj)) {
-        srd_dbg("Object is not a dictionary.");
-        goto err;
-    }
-
-    if (!(py_value = PyDict_GetItemString(py_obj, key))) {
-        goto err;
-    }
-
-    type = PyLong_Check(py_value) ? PyLong_AsLong(py_value) : SRD_ERR;
-    return type;
-
-err:
-    PyGILState_Release(gstate);
-    return SRD_ERR;
+	PyObject *py_value;
+	long type;
+	PyGILState_STATE gstate;
+ 	gstate = PyGILState_Ensure();
+ 	if (!PyDict_Check(py_obj)) {
+		srd_dbg("Object is not a dictionary.");
+		goto err;
+	}
+ 	if (!(py_value = PyDict_GetItemString(py_obj, key))) {
+		goto err;
+	}
+ 	type = PyLong_Check(py_value) ? PyLong_AsLong(py_value) : SRD_ERR;
+	return type;
+ err:
+	PyGILState_Release(gstate);
+	return SRD_ERR;
 }
-
-/**
+ /**
  * Get the value of a Python list item, returned as a newly
  * allocated char *.
  *
@@ -254,30 +211,22 @@ SRD_PRIV int py_listitem_as_str(PyObject *py_obj, int idx,
 {
 	PyObject *py_value;
 	PyGILState_STATE gstate;
-
-	gstate = PyGILState_Ensure();
-
-	if (!PyList_Check(py_obj)) {
+ 	gstate = PyGILState_Ensure();
+ 	if (!PyList_Check(py_obj)) {
 		srd_dbg("Object is not a list.");
 		goto err;
 	}
-
-	if (!(py_value = PyList_GetItem(py_obj, idx))) {
-        srd_dbg("Couldn't get list item %d.", idx);
+ 	if (!(py_value = PyList_GetItem(py_obj, idx))) {
+		srd_dbg("Couldn't get list item %d.", idx);
 		goto err;
 	}
-
+ 	PyGILState_Release(gstate);
+ 	return py_str_as_str(py_value, outstr);
+ err:
 	PyGILState_Release(gstate);
-
-	return py_str_as_str(py_value, outstr);
-
-err:
-	PyGILState_Release(gstate);
-
-	return SRD_ERR_PYTHON;
+ 	return SRD_ERR_PYTHON;
 }
-
-/**
+ /**
  * Get the value of a Python dictionary item, returned as a newly
  * allocated char *.
  *
@@ -295,38 +244,28 @@ SRD_PRIV int py_dict_value_to_str(PyObject *py_obj, PyObject *py_key,
 {
 	PyObject *py_value;
 	PyGILState_STATE gstate;
-
-	if (!py_obj || !py_key || !outstr)
+ 	if (!py_obj || !py_key || !outstr)
 		return SRD_ERR_ARG;
-
-	gstate = PyGILState_Ensure();
-
-	if (!PyDict_Check(py_obj)) {
+ 	gstate = PyGILState_Ensure();
+ 	if (!PyDict_Check(py_obj)) {
 		srd_dbg("Object is not a dictionary.");
 		goto err;
 	}
-
-	if (!(py_value = PyDict_GetItem(py_obj, py_key))) {
+ 	if (!(py_value = PyDict_GetItem(py_obj, py_key))) {
 		srd_dbg("Dictionary has no such key.");
 		goto err;
 	}
-
-	if (!PyUnicode_Check(py_value)) {
+ 	if (!PyUnicode_Check(py_value)) {
 		srd_dbg("Dictionary value should be a string.");
 		goto err;
 	}
-
+ 	PyGILState_Release(gstate);
+ 	return py_str_as_str(py_value, outstr);
+ err:
 	PyGILState_Release(gstate);
-
-	return py_str_as_str(py_value, outstr);
-
-err:
-	PyGILState_Release(gstate);
-
-	return SRD_ERR_PYTHON;
+ 	return SRD_ERR_PYTHON;
 }
-
-/**
+ /**
  * Get the value of a Python dictionary item, returned as a newly
  * allocated char *.
  *
@@ -342,41 +281,29 @@ SRD_PRIV int py_pydictitem_as_long(PyObject *py_obj, PyObject *py_key, uint64_t 
 {
 	PyObject *py_value;
 	PyGILState_STATE gstate;
-
-	if (!py_obj || !py_key || !out)
+ 	if (!py_obj || !py_key || !out)
 		return SRD_ERR_ARG;
-
-	gstate = PyGILState_Ensure();
-
-	if (!PyDict_Check(py_obj)) {
+ 	gstate = PyGILState_Ensure();
+ 	if (!PyDict_Check(py_obj)) {
 		srd_dbg("Object is not a dictionary.");
 		goto err;
 	}
-
-	if (!(py_value = PyDict_GetItem(py_obj, py_key))) {
+ 	if (!(py_value = PyDict_GetItem(py_obj, py_key))) {
 		srd_dbg("Dictionary has no such key.");
 		goto err;
 	}
-
-	if (!PyLong_Check(py_value)) {
+ 	if (!PyLong_Check(py_value)) {
 		srd_dbg("Dictionary value should be a long.");
 		goto err;
 	}
-
-	*out = PyLong_AsUnsignedLongLong(py_value);
-
+ 	*out = PyLong_AsUnsignedLongLong(py_value);
+ 	PyGILState_Release(gstate);
+ 	return SRD_OK;
+ err:
 	PyGILState_Release(gstate);
-
-	return SRD_OK;
-
-err:
-	PyGILState_Release(gstate);
-
-	return SRD_ERR_PYTHON;
+ 	return SRD_ERR_PYTHON;
 }
- 
-
-/**
+   /**
  * Get the value of a Python unicode string object, returned as a newly
  * allocated char *.
  *
@@ -393,16 +320,13 @@ SRD_PRIV int py_str_as_str(PyObject *py_str, char **outstr)
 	PyObject *py_bytes;
 	char *str;
 	PyGILState_STATE gstate;
-
-	gstate = PyGILState_Ensure();
-
-	if (!PyUnicode_Check(py_str)) {
+ 	gstate = PyGILState_Ensure();
+ 	if (!PyUnicode_Check(py_str)) {
 		srd_dbg("Object is not a string object.");
 		PyGILState_Release(gstate);
 		return SRD_ERR_PYTHON;
 	}
-
-	py_bytes = PyUnicode_AsUTF8String(py_str);
+ 	py_bytes = PyUnicode_AsUTF8String(py_str);
 	if (py_bytes) {
 		str = g_strdup(PyBytes_AsString(py_bytes));
 		Py_DECREF(py_bytes);
@@ -412,68 +336,51 @@ SRD_PRIV int py_str_as_str(PyObject *py_str, char **outstr)
 			return SRD_OK;
 		}
 	}
-    srd_exception_catch(NULL, "Failed to extract string");
-
-	PyGILState_Release(gstate);
-
-	return SRD_ERR_PYTHON;
+	srd_exception_catch(NULL, "Failed to extract string");
+ 	PyGILState_Release(gstate);
+ 	return SRD_ERR_PYTHON;
 }
-
-/*
+ /*
 */
 SRD_PRIV int py_object_to_int(PyObject *py_obj, int64_t *out)
 {
 	PyGILState_STATE gstate;
-
-	if (py_obj == NULL){
+ 	if (py_obj == NULL){
 		return SRD_ERR_PYTHON;
 	}
-
-	gstate = PyGILState_Ensure();
-
-	if (!PyLong_Check(py_obj))
+ 	gstate = PyGILState_Ensure();
+ 	if (!PyLong_Check(py_obj))
 	{
 		srd_dbg("py_object_to_int param should be a long.");
 		goto err;
 	}
-
-   *out = PyLong_AsLongLong(py_obj);
-
-	PyGILState_Release(gstate);
+	*out = PyLong_AsLongLong(py_obj);
+ 	PyGILState_Release(gstate);
 	return SRD_OK;
-
-err:
+ err:
 	PyGILState_Release(gstate);
 	return SRD_ERR_PYTHON;
 }
-
-SRD_PRIV int py_object_to_uint(PyObject *py_obj, uint64_t *out)
+ SRD_PRIV int py_object_to_uint(PyObject *py_obj, uint64_t *out)
 {
 	PyGILState_STATE gstate;
-
-	if (py_obj == NULL){
+ 	if (py_obj == NULL){
 		return SRD_ERR_PYTHON;
 	}
-
-	gstate = PyGILState_Ensure();
-
-	if (!PyLong_Check(py_obj))
+ 	gstate = PyGILState_Ensure();
+ 	if (!PyLong_Check(py_obj))
 	{
 		srd_dbg("py_object_to_int param should be a long.");
 		goto err;
 	}
-
-   *out = PyLong_AsUnsignedLongLong(py_obj);
-
-	PyGILState_Release(gstate);
+	*out = PyLong_AsUnsignedLongLong(py_obj);
+ 	PyGILState_Release(gstate);
 	return SRD_OK;
-
-err:
+ err:
 	PyGILState_Release(gstate);
 	return SRD_ERR_PYTHON;
 }
-
-/**
+ /**
  * Convert a Python list of unicode strings to a C string vector.
  * On success, a pointer to a newly allocated NULL-terminated array of
  * allocated C strings is written to @a out_strv. The caller must g_free()
@@ -495,42 +402,35 @@ SRD_PRIV int py_strseq_to_char(PyObject *py_strseq, char ***out_strv)
 	int ret = SRD_ERR_PYTHON;
 	int lv = 0;
 	char dec_buf[15];
-
-	gstate = PyGILState_Ensure();
-
-    str = NULL;
-    strv = NULL;
+ 	gstate = PyGILState_Ensure();
+ 	str = NULL;
+	strv = NULL;
 	if (!PySequence_Check(py_strseq)) {
 		srd_err("Object does not provide sequence protocol.");
 		goto err;
 	}
-
-	seq_len = PySequence_Size(py_strseq);
+ 	seq_len = PySequence_Size(py_strseq);
 	if (seq_len < 0) {
-        srd_exception_catch(NULL, "Failed to obtain sequence size");
+		srd_exception_catch(NULL, "Failed to obtain sequence size");
 		goto err;
 	}
-
-	strv = g_try_new0(char *, seq_len + 1);
+ 	strv = g_try_new0(char *, seq_len + 1);
 	if (!strv) {
 		srd_err("Failed to allocate result string vector.");
 		ret = SRD_ERR_MALLOC;
 		goto err;
 	}
-
-	for (i = 0; i < seq_len; i++) {
+ 	for (i = 0; i < seq_len; i++) {
 		py_item = PySequence_GetItem(py_strseq, i);
 		if (!py_item)
 			goto err;
-
-		if (PyUnicode_Check(py_item))
+ 		if (PyUnicode_Check(py_item))
 		{
 			py_bytes = PyUnicode_AsUTF8String(py_item);
 			Py_DECREF(py_item);
 			if (!py_bytes)
 				goto err;
-
-			str = g_strdup(PyBytes_AsString(py_bytes));
+ 			str = g_strdup(PyBytes_AsString(py_bytes));
 			Py_DECREF(py_bytes);
 			if (!str)
 				goto err;
@@ -545,24 +445,19 @@ SRD_PRIV int py_strseq_to_char(PyObject *py_strseq, char ***out_strv)
 			Py_DECREF(py_item);
 			goto err;
 		}
-
-		strv[i] = str;
+ 		strv[i] = str;
 	}
 	*out_strv = strv;
-
-	PyGILState_Release(gstate);
-
-	return SRD_OK;
-
-err:
+ 	PyGILState_Release(gstate);
+ 	return SRD_OK;
+ err:
 	if (strv)
 		g_strfreev(strv);
-    srd_exception_catch(NULL, "Failed to obtain string item");
+	srd_exception_catch(NULL, "Failed to obtain string item");
 	PyGILState_Release(gstate);
 	return ret;
 }
-
-/**
+ /**
  * Convert a Python scalar object to a GLib variant.
  * Supported variant types are string, int64 and double.
  *
@@ -575,14 +470,11 @@ SRD_PRIV GVariant *py_obj_to_variant(PyObject *py_obj)
 {
 	GVariant *var = NULL;
 	PyGILState_STATE gstate;
-
-	gstate = PyGILState_Ensure();
-
-	if (PyUnicode_Check(py_obj)) { /* string */
+ 	gstate = PyGILState_Ensure();
+ 	if (PyUnicode_Check(py_obj)) { /* string */
 		PyObject *py_bytes;
 		const char *str;
-
-		py_bytes = PyUnicode_AsUTF8String(py_obj);
+ 		py_bytes = PyUnicode_AsUTF8String(py_obj);
 		if (py_bytes) {
 			str = PyBytes_AsString(py_bytes);
 			if (str)
@@ -590,28 +482,24 @@ SRD_PRIV GVariant *py_obj_to_variant(PyObject *py_obj)
 			Py_DECREF(py_bytes);
 		}
 		if (!var)
-            srd_exception_catch(NULL, "Failed to extract string value");
+			srd_exception_catch(NULL, "Failed to extract string value");
 	} else if (PyLong_Check(py_obj)) { /* integer */
 		int64_t val;
-
-		val = PyLong_AsLongLong(py_obj);
+ 		val = PyLong_AsLongLong(py_obj);
 		if (!PyErr_Occurred())
 			var = g_variant_new_int64(val);
 		else
-            srd_exception_catch(NULL, "Failed to extract integer value");
+			srd_exception_catch(NULL, "Failed to extract integer value");
 	} else if (PyFloat_Check(py_obj)) { /* float */
 		double val;
-
-		val = PyFloat_AsDouble(py_obj);
+ 		val = PyFloat_AsDouble(py_obj);
 		if (!PyErr_Occurred())
 			var = g_variant_new_double(val);
 		else
-            srd_exception_catch(NULL, "Failed to extract float value");
+			srd_exception_catch(NULL, "Failed to extract float value");
 	} else {
 		srd_err("Failed to extract value of unsupported type.");
 	}
-
-	PyGILState_Release(gstate);
-
-	return var;
+ 	PyGILState_Release(gstate);
+ 	return var;
 }
