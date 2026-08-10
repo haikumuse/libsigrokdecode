@@ -164,6 +164,12 @@ SRD_PRIV void srd_exception_catch(char **error, const char *format, ...)
 cleanup:
 	if (error)
 		*error = g_strdup(final_msg);
+	/*
+	 * Always set the thread-local last error, so callers that don't
+	 * pass &error can still retrieve the message via srd_get_last_error().
+	 */
+	if (final_msg)
+		srd_set_last_error(final_msg);
 	Py_XDECREF(py_func);
 	Py_XDECREF(py_mod);
 	Py_XDECREF(py_etraceback);

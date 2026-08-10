@@ -31,7 +31,32 @@
 
 #define safe_free(p) if((p)){free((p)); (p) = NULL;}
 
+/*
+ * Static definition of tables ending with an all-zero sentinel entry
+ * may raise warnings when compiling with -Wmissing-field-initializers.
+ * GCC suppresses the warning only with { 0 }, clang wants { } instead.
+ */
+#ifdef __clang__
+#  define ALL_ZERO { }
+#else
+#  define ALL_ZERO { 0 }
+#endif
+
 /* srd_term_type enum and struct srd_term are now in libsigrokdecode.h */
+
+/*
+ * struct srd_session is defined here (PRIVATE) so that the public header
+ * only has a forward declaration. Frontends must use the API functions.
+ */
+struct srd_session {
+	int session_id;
+
+	/* List of decoder instances. srd_decoder_inst* type */
+	GSList *di_list;
+
+	/* List of frontend callbacks to receive decoder output. */
+	GSList *callbacks;
+};
 
 /* Custom Python types: */
 
@@ -65,17 +90,65 @@ SRD_PRIV void srd_inst_free_all(struct srd_session *sess);
 SRD_PRIV struct srd_decoder_inst *create_c_decoder_inst(struct srd_session *sess,
 		struct srd_decoder *dec, GHashTable *options);
 
-/* log.c */
+/* log.c — restored callback mechanism (compatible with xlog) */
 #if defined(G_OS_WIN32) && (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 4))
-/*
- * On MinGW, we need to specify the gnu_printf format flavor or GCC
- * will assume non-standard Microsoft printf syntax.
- */
-//SRD_PRIV int srd_log(int loglevel, const char *format, ...)
-//		__attribute__((__format__ (__gnu_printf__, 2, 3)));
+SRD_PRIV int srd_log(int loglevel, const char *format, ...)
+		__attribute__((__format__ (__gnu_printf__, 2, 3)));
 #else
-//SRD_PRIV int srd_log(int loglevel, const char *format, ...) G_GNUC_PRINTF(2, 3);
-#endif 
+SRD_PRIV int srd_log(int loglevel, const char *format, ...) G_GNUC_PRINTF(2, 3);
+#endif
+
+/* error.c — thread-local last error (for srd_get_last_error()) */
+SRD_PRIV void srd_set_last_error(const char *msg);
+SRD_PRIV void srd_set_last_error_take(char *msg);
+
+/*
+ * Instance operations vtable (PRIVATE).
+ *
+ * This vtable abstracts the C/Python decoder dispatch. Each decoder
+ * instance stores a pointer to one of these, and the framework calls
+ * through the vtable instead of branching on di->is_c_inst.
+ *
+ * The C implementation calls c_dec_inst->start/reset/end/etc.
+ * The Python implementation calls PyObject_CallMethod.
+ */
+struct srd_inst_ops {
+	/* Call the decoder's start() method */
+	int  (*call_start)(struct srd_decoder_inst *di, char **error);
+
+	/* Call the decoder's metadata() method */
+	void (*call_metadata)(struct srd_decoder_inst *di, int key, uint64_t value);
+
+	/* Call the decoder's end() method */
+	int  (*call_end)(struct srd_decoder_inst *di, char **error);
+
+	/* Call the decoder's reset() method (for terminate_reset) */
+	void (*call_reset)(struct srd_decoder_inst *di);
+
+	/* Free decoder-specific resources (called by srd_inst_free) */
+	void (*free_resources)(struct srd_decoder_inst *di);
+
+	/* Set options on the decoder */
+	int  (*option_set)(struct srd_decoder_inst *di, GHashTable *options);
+
+	/* Worker thread function */
+	gpointer (*decode_thread)(gpointer data);
+
+	/* Join/cleanup the worker thread */
+	void (*join_thread)(struct srd_decoder_inst *di);
+
+	/* Extract error message (transfer ownership, may return NULL) */
+	char *(*extract_error)(struct srd_decoder_inst *di);
+};
+
+extern const struct srd_inst_ops c_inst_ops;
+extern const struct srd_inst_ops py_inst_ops;
+
+/* Helper: retrieve the ops vtable from a decoder instance */
+static inline const struct srd_inst_ops *srd_di_ops(const struct srd_decoder_inst *di)
+{
+	return (const struct srd_inst_ops *)di->ops;
+}
 
 /* decoder.c */
 SRD_PRIV long srd_decoder_apiver(const struct srd_decoder *d);

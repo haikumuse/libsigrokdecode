@@ -18,13 +18,68 @@
  */
 
 #include "config.h"
+#include "libsigrokdecode-internal.h"
 #include "libsigrokdecode.h"
+#include <glib.h>
 
 /**
  * @file
  *
  * Error handling in libsigrokdecode.
  */
+
+/*
+ * Thread-local last-error message (restored from upstream).
+ * This provides an alternative to the char **error out-parameter pattern.
+ * Frontends can call srd_get_last_error() after any API function returns
+ * a negative error code, instead of passing &error to every call.
+ */
+static GPrivate last_error_key = G_PRIVATE_INIT(g_free);
+
+SRD_PRIV void srd_set_last_error(const char *msg)
+{
+	char *old = g_private_get(&last_error_key);
+	g_free(old);
+	g_private_replace(&last_error_key, msg ? g_strdup(msg) : NULL);
+}
+
+SRD_PRIV void srd_set_last_error_take(char *msg)
+{
+	char *old = g_private_get(&last_error_key);
+	g_free(old);
+	g_private_replace(&last_error_key, msg);
+}
+
+/**
+ * Get the last error message (thread-local).
+ *
+ * The returned string is thread-local and remains valid until the next
+ * libsigrokdecode call that sets an error in the current thread, or until
+ * srd_clear_last_error() is called.
+ *
+ * @return The last error message, or NULL if no error occurred.
+ *
+ * @since 0.6.0
+ */
+SRD_API const char *srd_get_last_error(void)
+{
+	char *msg = g_private_get(&last_error_key);
+	return msg;
+}
+
+/**
+ * Clear the last error message (thread-local).
+ *
+ * @since 0.6.0
+ */
+SRD_API void srd_clear_last_error(void)
+{
+	char *old = g_private_get(&last_error_key);
+	if (old) {
+		g_free(old);
+		g_private_replace(&last_error_key, NULL);
+	}
+}
 
 /**
  * @defgroup grp_error Error handling
@@ -147,6 +202,54 @@ SRD_API const char *srd_strerror_name(int error_code)
 	}
 
 	return str;
+}
+
+/** @} */
+
+/**
+ * @defgroup grp_buildinfo Build info
+ *
+ * Build information querying functions.
+ *
+ * @{
+ */
+
+/**
+ * Get a list of compile-time libraries and their versions.
+ *
+ * @return A GSList of "name version" strings. The caller must free the
+ *         list and its contents with g_slist_free_full(list, g_free).
+ *
+ * @since 0.6.0
+ */
+SRD_API GSList *srd_buildinfo_libs_get(void)
+{
+	GSList *libs = NULL;
+
+	libs = g_slist_append(libs,
+		g_strdup_printf("glib %d.%d.%d",
+			GLIB_MAJOR_VERSION, GLIB_MINOR_VERSION, GLIB_MICRO_VERSION));
+
+	libs = g_slist_append(libs,
+		g_strdup_printf("python %d.%d", PY_MAJOR_VERSION, PY_MINOR_VERSION));
+
+#ifdef HAVE_LIBUSB_1_0
+	libs = g_slist_append(libs, g_strdup("libusb-1.0"));
+#endif
+
+	return libs;
+}
+
+/**
+ * Get the canonical host triplet for this build.
+ *
+ * @return A newly allocated string that the caller must free with g_free().
+ *
+ * @since 0.6.0
+ */
+SRD_API char *srd_buildinfo_host_get(void)
+{
+	return g_strdup(CONF_HOST);
 }
 
 /** @} */

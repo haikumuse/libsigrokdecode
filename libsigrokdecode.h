@@ -34,18 +34,8 @@ struct srd_c_dll_entry;
 extern "C" {
 #endif
 
-struct srd_session {
-  int session_id;
-
-  /*
-              List of decoder instances.
-              srd_decoder_inst* type
-      */
-  GSList *di_list;
-
-  /* List of frontend callbacks to receive decoder output. */
-  GSList *callbacks;
-};
+/* srd_session is opaque — definition is in libsigrokdecode-internal.h */
+struct srd_session;
 
 /**
  * @file
@@ -439,6 +429,7 @@ struct srd_decoder_inst {
   uint64_t last_samplenum;
   GHashTable *c_options;
   const struct srd_decoder_runtime *runtime;
+  const void *ops; /* srd_inst_ops* — set at creation, do not modify */
 };
 
 #define SRD_C_DECODER_API_VERSION 4
@@ -558,6 +549,7 @@ SRD_API void srd_set_python_home(const wchar_t *path);
 
 /* session.c */
 SRD_API int srd_session_new(struct srd_session **sess);
+SRD_API const GSList *srd_session_inst_list_get(const struct srd_session *sess);
 SRD_API int srd_session_start(struct srd_session *sess, char **error);
 SRD_API int srd_session_metadata_set(struct srd_session *sess, int key,
                                      GVariant *data);
@@ -600,19 +592,54 @@ SRD_API int srd_inst_initial_pins_set_all(struct srd_decoder_inst *di,
                                           GArray *initial_pins);
 
 /* log.c */
-/**
- * Use a shared context, and drop the private log context
+/*
+ * Loglevels (restored from upstream for callback compatibility).
+ * When xlog is used as the default backend, these map to xlog levels.
  */
+enum srd_loglevel {
+	SRD_LOG_NONE = 0, /**< Output no messages at all. */
+	SRD_LOG_ERR  = 1, /**< Output error messages. */
+	SRD_LOG_WARN = 2, /**< Output warnings. */
+	SRD_LOG_INFO = 3, /**< Output informational messages. */
+	SRD_LOG_DBG  = 4, /**< Output debug messages. */
+	SRD_LOG_SPEW = 5, /**< Output very noisy debug messages. */
+};
+
+/** Log callback function type (restored from upstream). */
+typedef int (*srd_log_callback)(void *cb_data, int loglevel,
+				const char *format, va_list args);
+
+/** Use a shared xlog context, and drop the private log context. */
 SRD_API void srd_log_set_context(xlog_context *ctx);
 
-/**
- * Set the private log context level
- */
-SRD_API void srd_log_level(int level);
+/** Set the log level (maps to both xlog and callback levels). */
+SRD_API int srd_log_loglevel_set(int loglevel);
+
+/** Get the current log level. */
+SRD_API int srd_log_loglevel_get(void);
+
+/** Set a custom log callback (overrides xlog default). */
+SRD_API int srd_log_callback_set(srd_log_callback cb, void *cb_data);
+
+/** Get the current log callback and its data. */
+SRD_API int srd_log_callback_get(srd_log_callback *cb, void **cb_data);
+
+/** Restore the default log callback (xlog backend). */
+SRD_API int srd_log_callback_set_default(void);
+
+/* error.c — last-error API (alternative to char **error) */
+/** Get the last error message (thread-local). Returns NULL if no error. */
+SRD_API const char *srd_get_last_error(void);
+/** Clear the last error message (thread-local). */
+SRD_API void srd_clear_last_error(void);
 
 /* error.c */
 SRD_API const char *srd_strerror(int error_code);
 SRD_API const char *srd_strerror_name(int error_code);
+
+/* buildinfo (restored from upstream) */
+SRD_API GSList *srd_buildinfo_libs_get(void);
+SRD_API char *srd_buildinfo_host_get(void);
 
 /* version.c */
 SRD_API int srd_package_version_major_get(void);

@@ -75,6 +75,87 @@ static gboolean srd_check_init(void)
         return TRUE;
 }
 
+/*
+ * Validation functions (restored from upstream).
+ * Check for duplicate IDs in decoder metadata to catch malformed decoders.
+ */
+
+static gboolean contains_duplicates(GSList *list)
+{
+    for (GSList *l1 = list; l1; l1 = l1->next) {
+        for (GSList *l2 = l1->next; l2; l2 = l2->next)
+            if (!strcmp(l1->data, l2->data))
+                return TRUE;
+    }
+    return FALSE;
+}
+
+/* Check for duplicate channel IDs within a single list.
+ * Each item is struct srd_channel* with an ->id field. */
+static gboolean contains_duplicate_channel_ids(GSList *list)
+{
+    for (GSList *l1 = list; l1; l1 = l1->next) {
+        struct srd_channel *c1 = l1->data;
+        unsigned int cnt = 0;
+        for (GSList *l2 = list; l2; l2 = l2->next) {
+            struct srd_channel *c2 = l2->data;
+            if (!strcmp(c1->id, c2->id))
+                cnt++;
+        }
+        if (cnt > 1)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+/* Check for duplicate IDs between two channel lists. */
+static gboolean contains_duplicate_channel_ids_cross(GSList *list1, GSList *list2)
+{
+    for (GSList *l1 = list1; l1; l1 = l1->next) {
+        struct srd_channel *c1 = l1->data;
+        for (GSList *l2 = list2; l2; l2 = l2->next) {
+            struct srd_channel *c2 = l2->data;
+            if (!strcmp(c1->id, c2->id))
+                return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+/* Check for duplicate option IDs. Each item is struct srd_decoder_option* */
+static gboolean contains_duplicate_option_ids(GSList *list)
+{
+    for (GSList *l1 = list; l1; l1 = l1->next) {
+        struct srd_decoder_option *o1 = l1->data;
+        unsigned int cnt = 0;
+        for (GSList *l2 = list; l2; l2 = l2->next) {
+            struct srd_decoder_option *o2 = l2->data;
+            if (!strcmp(o1->id, o2->id))
+                cnt++;
+        }
+        if (cnt > 1)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+/* Check for duplicate annotation row IDs. */
+static gboolean contains_duplicate_row_ids(GSList *list)
+{
+    for (GSList *l1 = list; l1; l1 = l1->next) {
+        struct srd_decoder_annotation_row *r1 = l1->data;
+        unsigned int cnt = 0;
+        for (GSList *l2 = list; l2; l2 = l2->next) {
+            struct srd_decoder_annotation_row *r2 = l2->data;
+            if (!strcmp(r1->id, r2->id))
+                cnt++;
+        }
+        if (cnt > 1)
+            return TRUE;
+    }
+    return FALSE;
+}
+
 /**
  * Returns the list of loaded protocol decoders.
  *
@@ -920,6 +1001,41 @@ SRD_API int srd_decoder_load(const char* module_name)
 
     if (get_binary_classes(d) != SRD_OK) {
         fail_txt = "cannot get binary classes";
+        goto err_out;
+    }
+
+    /* Validate decoder metadata for duplicates (restored from upstream). */
+    if (d->inputs && contains_duplicates(d->inputs)) {
+        fail_txt = "duplicate input IDs";
+        goto err_out;
+    }
+    if (d->outputs && contains_duplicates(d->outputs)) {
+        fail_txt = "duplicate output IDs";
+        goto err_out;
+    }
+    if (d->tags && contains_duplicates(d->tags)) {
+        fail_txt = "duplicate tags";
+        goto err_out;
+    }
+    if (d->channels && contains_duplicate_channel_ids(d->channels)) {
+        fail_txt = "duplicate channel IDs";
+        goto err_out;
+    }
+    if (d->opt_channels && contains_duplicate_channel_ids(d->opt_channels)) {
+        fail_txt = "duplicate optional channel IDs";
+        goto err_out;
+    }
+    if (d->channels && d->opt_channels &&
+        contains_duplicate_channel_ids_cross(d->channels, d->opt_channels)) {
+        fail_txt = "channel and optional channel IDs contain duplicates";
+        goto err_out;
+    }
+    if (d->options && contains_duplicate_option_ids(d->options)) {
+        fail_txt = "duplicate option IDs";
+        goto err_out;
+    }
+    if (d->annotation_rows && contains_duplicate_row_ids(d->annotation_rows)) {
+        fail_txt = "duplicate annotation row IDs";
         goto err_out;
     }
 

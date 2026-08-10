@@ -25,40 +25,58 @@
 
 #include "libsigrokdecode.h"
 #include <log/xlog.h>
-
+#include <glib.h>
 
 extern xlog_writer *srd_log;
 
 /**
- * Init a private log context
+ * Init a private log context.
  */
-SRD_PRIV void srd_log_init();
+SRD_PRIV void srd_log_init(void);
 
 /**
- * Destroy the private log context
+ * Destroy the private log context.
  */
-SRD_PRIV void srd_log_uninit();
+SRD_PRIV void srd_log_uninit(void);
 
 /**
- * Use a shared context, and drop the private log context
+ * Internal log dispatch function.
+ *
+ * Routes messages to either a custom callback (if set via
+ * srd_log_callback_set()) or the xlog backend (default).
  */
-SRD_API void srd_log_set_context(xlog_context *ctx);
-
-/**
- * Set the private log context level
- */
-SRD_API void srd_log_level(int level);
-
-#define LOG_PREFIX ""
-#define srd_err(fmt, args...) ((void)xlog_err(srd_log, LOG_PREFIX fmt, ##args))
-#define srd_warn(fmt, args...) ((void)xlog_warn(srd_log, LOG_PREFIX fmt, ##args))
-#define srd_info(fmt, args...) ((void)xlog_info(srd_log, LOG_PREFIX fmt, ##args))
-#ifndef NDEBUG
-#define srd_dbg(fmt, args...) ((void)xlog_dbg(srd_log, LOG_PREFIX fmt, ##args))
-#define srd_detail(fmt, args...) ((void)xlog_detail(srd_log, LOG_PREFIX fmt, ##args))
+#if defined(G_OS_WIN32) && (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 4))
+SRD_PRIV int srd_log(int loglevel, const char *format, ...)
+		__attribute__((__format__ (__gnu_printf__, 2, 3)));
 #else
-#define srd_dbg(fmt, args...) ((void)0)
-#define srd_detail(fmt, args...) ((void)0)
+SRD_PRIV int srd_log(int loglevel, const char *format, ...) G_GNUC_PRINTF(2, 3);
 #endif
+
+/*
+ * Convenience macros — all library code uses these.
+ * They route through srd_log(), which supports both the xlog backend
+ * (default) and custom callbacks (set via srd_log_callback_set()).
+ *
+ * SRD_LOG_* levels are defined in libsigrokdecode.h (enum srd_loglevel).
+ */
+#define LOG_PREFIX ""
+
+#define srd_err(...)  srd_log(SRD_LOG_ERR,  LOG_PREFIX __VA_ARGS__)
+#define srd_warn(...) srd_log(SRD_LOG_WARN, LOG_PREFIX __VA_ARGS__)
+#define srd_info(...) srd_log(SRD_LOG_INFO, LOG_PREFIX __VA_ARGS__)
+
+#ifndef NDEBUG
+#define srd_dbg(...)  srd_log(SRD_LOG_DBG,  LOG_PREFIX __VA_ARGS__)
+#define srd_spew(...) srd_log(SRD_LOG_SPEW, LOG_PREFIX __VA_ARGS__)
+#else
+#define srd_dbg(...)  ((void)0)
+#define srd_spew(...) ((void)0)
+#endif
+
+/*
+ * Backward compatibility: srd_detail was the old name for the
+ * highest verbosity level (now SRD_LOG_SPEW).
+ */
+#define srd_detail(...) srd_spew(__VA_ARGS__)
 
 #endif

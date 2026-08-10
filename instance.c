@@ -191,6 +191,351 @@ static const struct srd_decoder_runtime c_decoder_runtime = {
     .set_private = c_decoder_set_private_impl,
 };
 
+/* =========================================================================
+ * Instance operations vtable — C decoder implementation
+ * ========================================================================= */
+
+/* Forward declarations — thread functions defined later in this file */
+static gpointer di_thread(gpointer data);
+static gpointer c_di_thread(gpointer data);
+
+static int c_call_start(struct srd_decoder_inst *di, char **error)
+{
+    if (di->c_dec_inst && di->c_dec_inst->start)
+        di->c_dec_inst->start(di);
+    return SRD_OK;
+}
+
+static void c_call_metadata(struct srd_decoder_inst *di, int key, uint64_t value)
+{
+    di->samplerate = value;
+    if (di->c_dec_inst && di->c_dec_inst->metadata)
+        di->c_dec_inst->metadata(di, key, value);
+}
+
+static int c_call_end(struct srd_decoder_inst *di, char **error)
+{
+    di->last_samplenum = di->abs_cur_samplenum;
+    if (di->c_dec_inst && di->c_dec_inst->end)
+        di->c_dec_inst->end(di);
+    return SRD_OK;
+}
+
+static void c_call_reset(struct srd_decoder_inst *di)
+{
+    if (di->c_dec_inst && di->c_dec_inst->reset)
+        di->c_dec_inst->reset(di);
+}
+
+static void c_free_resources(struct srd_decoder_inst *di)
+{
+    if (di->c_dec_inst && di->c_dec_inst->destroy)
+        di->c_dec_inst->destroy(di);
+    if (di->error_message) {
+        g_free(di->error_message);
+        di->error_message = NULL;
+    }
+    if (di->c_options) {
+        g_hash_table_destroy(di->c_options);
+        di->c_options = NULL;
+    }
+    if (di->c_pin_cache) {
+        g_free(di->c_pin_cache);
+        di->c_pin_cache = NULL;
+    }
+}
+
+static int c_option_set(struct srd_decoder_inst *di, GHashTable *options)
+{
+    if (!di->c_options) {
+        di->c_options = g_hash_table_new_full(g_str_hash, g_str_equal,
+            g_free, (GDestroyNotify)g_variant_unref);
+    }
+    GHashTableIter iter;
+    gpointer key, value;
+    g_hash_table_iter_init(&iter, options);
+    while (g_hash_table_iter_next(&iter, &key, &value)) {
+        g_hash_table_insert(di->c_options,
+            g_strdup((const char*)key),
+            g_variant_ref((GVariant*)value));
+    }
+    return SRD_OK;
+}
+
+static char *c_extract_error(struct srd_decoder_inst *di)
+{
+    char *msg = di->error_message;
+    di->error_message = NULL;
+    return msg;
+}
+
+static void c_join_thread(struct srd_decoder_inst *di)
+{
+    if (!di->thread_handle)
+        return;
+
+    srd_dbg("%s: Joining C decoder thread.", di->inst_id);
+
+    g_mutex_lock(&di->data_mutex);
+    di->want_wait_terminate = TRUE;
+    di->is_task_stop_signal = TRUE;
+    g_cond_signal(&di->got_new_samples_cond);
+    g_mutex_unlock(&di->data_mutex);
+
+    srd_dbg("%s: Running join().", di->inst_id);
+    (void)g_thread_join(di->thread_handle);
+    srd_dbg("%s: Call to join() done.", di->inst_id);
+    di->thread_handle = NULL;
+
+    g_cond_clear(&di->got_new_samples_cond);
+    g_cond_init(&di->got_new_samples_cond);
+    g_cond_clear(&di->handled_all_samples_cond);
+    g_cond_init(&di->handled_all_samples_cond);
+    g_mutex_clear(&di->data_mutex);
+    g_mutex_init(&di->data_mutex);
+}
+
+const struct srd_inst_ops c_inst_ops = {
+    .call_start     = c_call_start,
+    .call_metadata  = c_call_metadata,
+    .call_end       = c_call_end,
+    .call_reset     = c_call_reset,
+    .free_resources = c_free_resources,
+    .option_set     = c_option_set,
+    .decode_thread  = c_di_thread,
+    .join_thread    = c_join_thread,
+    .extract_error  = c_extract_error,
+};
+
+/* =========================================================================
+ * Instance operations vtable — Python decoder implementation
+ * ========================================================================= */
+
+static int py_call_start(struct srd_decoder_inst *di, char **error)
+{
+    PyObject *py_res;
+    PyGILState_STATE gstate;
+
+    gstate = PyGILState_Ensure();
+
+    if (!(py_res = PyObject_CallMethod(di->py_inst, "start", NULL))) {
+        srd_exception_catch(error, "Protocol decoder instance %s",
+            di->inst_id);
+        PyGILState_Release(gstate);
+        return SRD_ERR_PYTHON;
+    }
+    Py_DecRef(py_res);
+
+    /* Set self.samplenum to 0. */
+    py_res = PyLong_FromLong(0);
+    PyObject_SetAttrString(di->py_inst, "samplenum", py_res);
+    Py_DECREF(py_res);
+
+    /* Set self.matched to 0. */
+    py_res = PyLong_FromLong(0);
+    PyObject_SetAttrString(di->py_inst, "matched", py_res);
+    Py_DECREF(py_res);
+
+    PyGILState_Release(gstate);
+    return SRD_OK;
+}
+
+static void py_call_metadata(struct srd_decoder_inst *di, int key, uint64_t value)
+{
+    PyGILState_STATE gstate;
+
+    gstate = PyGILState_Ensure();
+
+    if (PyObject_HasAttrString(di->py_inst, "metadata")) {
+        PyObject *py_ret = PyObject_CallMethod(di->py_inst, "metadata", "lK",
+            (long)key, (unsigned long long)value);
+        Py_XDECREF(py_ret);
+    }
+
+    PyGILState_Release(gstate);
+}
+
+static int py_call_end(struct srd_decoder_inst *di, char **error)
+{
+    PyObject *py_res;
+    PyGILState_STATE gstate;
+
+    gstate = PyGILState_Ensure();
+
+    if (PyObject_HasAttrString(di->py_inst, "end")) {
+        PyObject *py_cur = PyLong_FromUnsignedLongLong(di->abs_cur_samplenum);
+        PyObject_SetAttrString(di->py_inst, "last_samplenum", py_cur);
+        Py_DECREF(py_cur);
+
+        py_res = PyObject_CallMethod(di->py_inst, "end", NULL);
+        if (!py_res) {
+            srd_exception_catch(error, "Protocol decoder instance %s",
+                di->inst_id);
+            PyGILState_Release(gstate);
+            return SRD_ERR_PYTHON;
+        }
+        Py_XDECREF(py_res);
+    }
+
+    PyGILState_Release(gstate);
+    return SRD_OK;
+}
+
+static void py_call_reset(struct srd_decoder_inst *di)
+{
+    PyGILState_STATE gstate;
+
+    gstate = PyGILState_Ensure();
+    if (PyObject_HasAttrString(di->py_inst, "reset")) {
+        srd_dbg("Calling reset() of instance %s", di->inst_id);
+        PyObject *py_ret = PyObject_CallMethod(di->py_inst, "reset", NULL);
+        Py_XDECREF(py_ret);
+    }
+    PyGILState_Release(gstate);
+}
+
+static void py_free_resources(struct srd_decoder_inst *di)
+{
+    PyGILState_STATE gstate;
+
+    gstate = PyGILState_Ensure();
+    Py_DecRef(di->py_inst);
+    if (di->py_pinvalues) {
+        Py_DecRef(di->py_pinvalues);
+    }
+    PyGILState_Release(gstate);
+}
+
+static int py_option_set(struct srd_decoder_inst *di, GHashTable *options)
+{
+    struct srd_decoder_option *sdo;
+    PyObject *py_di_options, *py_optval;
+    GVariant *value;
+    GSList *l;
+    double val_double;
+    gint64 val_int;
+    int ret;
+    const char *val_str;
+    PyGILState_STATE gstate;
+
+    gstate = PyGILState_Ensure();
+
+    if (!PyObject_HasAttrString(di->decoder->py_dec, "options")) {
+        PyGILState_Release(gstate);
+        if (options && g_hash_table_size(options) == 0) {
+            return SRD_OK;
+        } else {
+            srd_err("Protocol decoder has no options.");
+            return SRD_ERR_ARG;
+        }
+    }
+
+    ret = SRD_ERR_PYTHON;
+    py_optval = NULL;
+
+    if (!(py_di_options = PyObject_GetAttrString(di->py_inst, "options")))
+        goto err_out;
+    Py_DECREF(py_di_options);
+    py_di_options = PyDict_New();
+    PyObject_SetAttrString(di->py_inst, "options", py_di_options);
+
+    for (l = di->decoder->options; l; l = l->next) {
+        sdo = l->data;
+        value = NULL;
+        if (options) {
+            value = g_hash_table_lookup(options, sdo->id);
+        }
+
+        if (value) {
+            if (!g_variant_type_equal(g_variant_get_type(value),
+                    g_variant_get_type(sdo->def))) {
+                srd_err("Option '%s' should have the same type "
+                        "as the default value.",
+                    sdo->id);
+                goto err_out;
+            }
+        } else {
+            value = sdo->def;
+        }
+        if (g_variant_is_of_type(value, G_VARIANT_TYPE_STRING)) {
+            val_str = g_variant_get_string(value, NULL);
+            if (!(py_optval = PyUnicode_FromString(val_str))) {
+                PyErr_Clear();
+                srd_err("Option '%s' requires a UTF-8 string value.", sdo->id);
+                goto err_out;
+            }
+        } else if (g_variant_is_of_type(value, G_VARIANT_TYPE_INT64)) {
+            val_int = g_variant_get_int64(value);
+            if (!(py_optval = PyLong_FromLongLong((long long)val_int))) {
+                PyErr_Clear();
+                srd_err("Option '%s' has invalid integer value.", sdo->id);
+                goto err_out;
+            }
+        } else if (g_variant_is_of_type(value, G_VARIANT_TYPE_DOUBLE)) {
+            val_double = g_variant_get_double(value);
+            if (!(py_optval = PyFloat_FromDouble(val_double))) {
+                PyErr_Clear();
+                srd_err("Option '%s' has invalid float value.",
+                    sdo->id);
+                goto err_out;
+            }
+        }
+        if (PyDict_SetItemString(py_di_options, sdo->id, py_optval) == -1)
+            goto err_out;
+        if (options) {
+            g_hash_table_remove(options, sdo->id);
+        }
+    }
+    if (options && g_hash_table_size(options) != 0)
+        srd_warn("Unknown options specified for '%s'", di->inst_id);
+
+    ret = SRD_OK;
+
+err_out:
+    Py_XDECREF(py_optval);
+    if (PyErr_Occurred()) {
+        srd_exception_catch(NULL, "Stray exception in srd_inst_option_set()");
+        ret = SRD_ERR_PYTHON;
+    }
+    PyGILState_Release(gstate);
+
+    return ret;
+}
+
+static char *py_extract_error(struct srd_decoder_inst *di)
+{
+    char *msg = di->python_proc_error;
+    di->python_proc_error = NULL;
+    return msg;
+}
+
+static void py_join_thread(struct srd_decoder_inst *di)
+{
+    srd_dbg("%s: Python decoder runs synchronously, no thread to join.", di->inst_id);
+    di->want_wait_terminate = TRUE;
+    di->is_task_stop_signal = TRUE;
+}
+
+const struct srd_inst_ops py_inst_ops = {
+    .call_start     = py_call_start,
+    .call_metadata  = py_call_metadata,
+    .call_end       = py_call_end,
+    .call_reset     = py_call_reset,
+    .free_resources = py_free_resources,
+    .option_set     = py_option_set,
+    .decode_thread  = di_thread,
+    .join_thread    = py_join_thread,
+    .extract_error  = py_extract_error,
+};
+
+/* =========================================================================
+ * Helper: invoke vtable ops with proper casting
+ * ========================================================================= */
+static inline const struct srd_inst_ops *di_ops(const struct srd_decoder_inst *di)
+{
+    return (const struct srd_inst_ops *)di->ops;
+}
+
 static void oldpins_array_seed(struct srd_decoder_inst* di)
 {
     size_t count;
@@ -236,134 +581,12 @@ static void oldpins_array_free(struct srd_decoder_inst* di)
 SRD_API int srd_inst_option_set(struct srd_decoder_inst* di,
     GHashTable* options)
 {
-    struct srd_decoder_option* sdo;
-    PyObject *py_di_options, *py_optval;
-    GVariant* value;
-    GSList* l;
-    double val_double;
-    gint64 val_int;
-    int ret;
-    const char* val_str;
-    PyGILState_STATE gstate;
-
     if (!di) {
         srd_err("Invalid decoder instance.");
         return SRD_ERR_ARG;
     }
 
-    if (di->is_c_inst) {
-        if (!di->c_options) {
-            di->c_options = g_hash_table_new_full(g_str_hash, g_str_equal,
-                g_free, (GDestroyNotify)g_variant_unref);
-        }
-        GHashTableIter iter;
-        gpointer key, value;
-        g_hash_table_iter_init(&iter, options);
-        while (g_hash_table_iter_next(&iter, &key, &value)) {
-            g_hash_table_insert(di->c_options,
-                g_strdup((const char*)key),
-                g_variant_ref((GVariant*)value));
-        }
-        return SRD_OK;
-    }
-
-    gstate = PyGILState_Ensure();
-
-    if (!PyObject_HasAttrString(di->decoder->py_dec, "options")) {
-        /* Decoder has no options. */
-        PyGILState_Release(gstate);
-        if (g_hash_table_size(options) == 0) {
-            /* No options provided. */
-            return SRD_OK;
-        } else {
-            srd_err("Protocol decoder has no options.");
-            return SRD_ERR_ARG;
-        }
-        return SRD_OK;
-    }
-
-    ret = SRD_ERR_PYTHON;
-    py_optval = NULL;
-
-    /*
-     * The 'options' tuple is a class variable, but we need to
-     * change it. Changing it directly will affect the entire class,
-     * so we need to create a new object for it, and populate that
-     * instead.
-     */
-    if (!(py_di_options = PyObject_GetAttrString(di->py_inst, "options")))
-        goto err_out;
-    Py_DECREF(py_di_options);
-    py_di_options = PyDict_New();
-    PyObject_SetAttrString(di->py_inst, "options", py_di_options);
-
-    for (l = di->decoder->options; l; l = l->next) {
-        sdo = l->data;
-        value = NULL;
-        if (options) {
-            value = g_hash_table_lookup(options, sdo->id);
-        }
-        
-        if (value) {
-            /* A value was supplied for this option. */
-            if (!g_variant_type_equal(g_variant_get_type(value),
-                    g_variant_get_type(sdo->def))) {
-                srd_err("Option '%s' should have the same type "
-                        "as the default value.",
-                    sdo->id);
-                goto err_out;
-            }
-        } else {
-            /* Use default for this option. */
-            value = sdo->def;
-        }
-        if (g_variant_is_of_type(value, G_VARIANT_TYPE_STRING)) {
-            val_str = g_variant_get_string(value, NULL);
-            if (!(py_optval = PyUnicode_FromString(val_str))) {
-                /* Some UTF-8 encoding error. */
-                PyErr_Clear();
-                srd_err("Option '%s' requires a UTF-8 string value.", sdo->id);
-                goto err_out;
-            }
-        } else if (g_variant_is_of_type(value, G_VARIANT_TYPE_INT64)) {
-            val_int = g_variant_get_int64(value);
-            if (!(py_optval = PyLong_FromLongLong((long long)val_int))) {
-                /* ValueError Exception */
-                PyErr_Clear();
-                srd_err("Option '%s' has invalid integer value.", sdo->id);
-                goto err_out;
-            }
-        } else if (g_variant_is_of_type(value, G_VARIANT_TYPE_DOUBLE)) {
-            val_double = g_variant_get_double(value);
-            if (!(py_optval = PyFloat_FromDouble(val_double))) {
-                /* ValueError Exception */
-                PyErr_Clear();
-                srd_err("Option '%s' has invalid float value.",
-                    sdo->id);
-                goto err_out;
-            }
-        }
-        if (PyDict_SetItemString(py_di_options, sdo->id, py_optval) == -1)
-            goto err_out;
-        /* Not harmful even if we used the default. */
-        if (options) {
-            g_hash_table_remove(options, sdo->id);
-        }
-    }
-    if (options && g_hash_table_size(options) != 0)
-        srd_warn("Unknown options specified for '%s'", di->inst_id);
-
-    ret = SRD_OK;
-
-err_out:
-    Py_XDECREF(py_optval);
-    if (PyErr_Occurred()) {
-        srd_exception_catch(NULL, "Stray exception in srd_inst_option_set()");
-        ret = SRD_ERR_PYTHON;
-    }
-    PyGILState_Release(gstate);
-
-    return ret;
+    return di_ops(di)->option_set(di, options);
 }
 
 /* Helper GComparefunc for g_slist_find_custom() in srd_inst_channel_set_all(). */
@@ -573,6 +796,7 @@ SRD_PRIV struct srd_decoder_inst* create_c_decoder_inst(struct srd_session* sess
     di->samplerate = 0;
     di->c_options = NULL;
     di->runtime = &c_decoder_runtime;
+    di->ops = &c_inst_ops;
 
     g_cond_init(&di->got_new_samples_cond);
     g_cond_init(&di->handled_all_samples_cond);
@@ -715,6 +939,9 @@ SRD_API struct srd_decoder_inst* srd_inst_new(struct srd_session* sess,
     di->python_proc_error = NULL;
     di->is_task_stop_signal = FALSE;
 
+    di->is_c_inst = FALSE;
+    di->ops = &py_inst_ops;
+
     /*
      * Strictly speaking initialization of statically allocated
      * condition and mutex variables (or variables allocated on the
@@ -743,35 +970,7 @@ static void srd_inst_join_decode_thread(struct srd_decoder_inst* di)
     if (!di)
         return;
 
-    if (di->is_c_inst) {
-        if (!di->thread_handle)
-            return;
-
-        srd_dbg("%s: Joining C decoder thread.", di->inst_id);
-
-        srd_dbg("%s: Raising want_term, sending got_new.", di->inst_id);
-        g_mutex_lock(&di->data_mutex);
-        di->want_wait_terminate = TRUE;
-        di->is_task_stop_signal = TRUE;
-        g_cond_signal(&di->got_new_samples_cond);
-        g_mutex_unlock(&di->data_mutex);
-
-        srd_dbg("%s: Running join().", di->inst_id);
-        (void)g_thread_join(di->thread_handle);
-        srd_dbg("%s: Call to join() done.", di->inst_id);
-        di->thread_handle = NULL;
-
-        g_cond_clear(&di->got_new_samples_cond);
-        g_cond_init(&di->got_new_samples_cond);
-        g_cond_clear(&di->handled_all_samples_cond);
-        g_cond_init(&di->handled_all_samples_cond);
-        g_mutex_clear(&di->data_mutex);
-        g_mutex_init(&di->data_mutex);
-    } else {
-        srd_dbg("%s: Python decoder runs synchronously, no thread to join.", di->inst_id);
-        di->want_wait_terminate = TRUE;
-        di->is_task_stop_signal = TRUE;
-    }
+    di_ops(di)->join_thread(di);
 }
 
 static void srd_inst_reset_state(struct srd_decoder_inst* di)
@@ -979,62 +1178,21 @@ SRD_API int srd_inst_initial_pins_set_all(struct srd_decoder_inst* di, GArray* i
 /** @private */
 SRD_PRIV int srd_inst_start(struct srd_decoder_inst* di, char** error)
 {
-    PyObject* py_res;
     GSList* l;
     struct srd_decoder_inst* next_di;
     int ret;
-    PyGILState_STATE gstate;
 
     srd_dbg("Calling start() of instance %s.", di->inst_id);
 
-    if (di->is_c_inst) {
-        di->first_pos = TRUE;
-        di->abs_cur_matched = FALSE;
-        di->skip_zero = FALSE;
-
-        if (di->c_dec_inst && di->c_dec_inst->start)
-            di->c_dec_inst->start(di);
-
-        for (l = di->next_di; l; l = l->next) {
-            next_di = l->data;
-            if ((ret = srd_inst_start(next_di, error)) != SRD_OK)
-                return ret;
-        }
-
-        return SRD_OK;
-    }
-
-    gstate = PyGILState_Ensure();
-
-    /* Run self.start(). */
-    if (!(py_res = PyObject_CallMethod(di->py_inst, "start", NULL))) {
-        srd_exception_catch(error, "Protocol decoder instance %s",
-            di->inst_id);
-        PyGILState_Release(gstate);
-        return SRD_ERR_PYTHON;
-    }
-    Py_DecRef(py_res);
-
-    /* first pos */
+    /* Common pre-start flags */
     di->first_pos = TRUE;
-
-    /* none matched */
     di->abs_cur_matched = FALSE;
-
-    /* skip zero flag */
     di->skip_zero = FALSE;
 
-    /* Set self.samplenum to 0. */
-    py_res = PyLong_FromLong(0);
-    PyObject_SetAttrString(di->py_inst, "samplenum", py_res);
-    Py_DECREF(py_res);
-
-    /* Set self.matched to 0. */
-    py_res = PyLong_FromLong(0);
-    PyObject_SetAttrString(di->py_inst, "matched", py_res);
-    Py_DECREF(py_res);
-
-    PyGILState_Release(gstate);
+    /* Dispatch to C or Python start() via vtable */
+    ret = di_ops(di)->call_start(di, error);
+    if (ret != SRD_OK)
+        return ret;
 
     /* Start all the PDs stacked on top of this one. */
     for (l = di->next_di; l; l = l->next) {
@@ -1570,58 +1728,16 @@ SRD_PRIV int srd_inst_decode(struct srd_decoder_inst* di,
 {
     /* Return an error upon unusable input. */
     if (!di) {
-        *error = g_strdup("empty decoder instance");
+        srd_set_last_error("empty decoder instance");
         return SRD_ERR_ARG;
     }
     if (!inbuf) {
-        *error = g_strdup("NULL buffer pointer");
+        srd_set_last_error("NULL buffer pointer");
         return SRD_ERR_ARG;
     }
     if (inbuflen == 0) {
-        *error = g_strdup("empty buffer");
+        srd_set_last_error("empty buffer");
         return SRD_ERR_ARG;
-    }
-
-    if (di->is_c_inst) {
-        if (di->first_pos) {
-            di->abs_cur_samplenum = abs_start_samplenum;
-        }
-
-        if (abs_start_samplenum != di->abs_cur_samplenum || abs_end_samplenum < abs_start_samplenum) {
-            return SRD_ERR_ARG;
-        }
-
-        if (!di->thread_handle) {
-            srd_dbg("No worker thread for this C decoder stack "
-                    "exists yet, creating one: %s.",
-                di->inst_id);
-            di->thread_handle = g_thread_new(di->inst_id,
-                c_di_thread, di);
-        }
-
-        g_mutex_lock(&di->data_mutex);
-        di->abs_start_samplenum = abs_start_samplenum & ~7ULL;
-        di->abs_end_samplenum = abs_end_samplenum;
-        di->inbuf = inbuf;
-        di->inbuf_const = inbuf_const;
-        di->inbuflen = inbuflen;
-        di->got_new_samples = TRUE;
-        di->handled_all_samples = FALSE;
-        g_cond_signal(&di->got_new_samples_cond);
-        g_mutex_unlock(&di->data_mutex);
-
-        g_mutex_lock(&di->data_mutex);
-        while (!di->handled_all_samples && !di->want_wait_terminate)
-            g_cond_wait(&di->handled_all_samples_cond, &di->data_mutex);
-        g_mutex_unlock(&di->data_mutex);
-
-        if (di->error_message) {
-            *error = di->error_message;
-            di->error_message = NULL;
-            return SRD_ERR_TERM_REQ;
-        }
-
-        return SRD_OK;
     }
 
     if (di->first_pos) {
@@ -1629,8 +1745,8 @@ SRD_PRIV int srd_inst_decode(struct srd_decoder_inst* di,
     }
 
     if (abs_start_samplenum != di->abs_cur_samplenum || abs_end_samplenum < abs_start_samplenum) {
-        srd_dbg("Incorrect sample numbers: start=%" PRIu64 ", cur=%" PRIu64 ", end=%" PRIu64 ".", abs_start_samplenum,
-            di->abs_cur_samplenum, abs_end_samplenum);
+        srd_dbg("Incorrect sample numbers: start=%" PRIu64 ", cur=%" PRIu64 ", end=%" PRIu64 ".",
+            abs_start_samplenum, di->abs_cur_samplenum, abs_end_samplenum);
         return SRD_ERR_ARG;
     }
 
@@ -1638,13 +1754,13 @@ SRD_PRIV int srd_inst_decode(struct srd_decoder_inst* di,
         abs_start_samplenum, abs_end_samplenum,
         abs_end_samplenum - abs_start_samplenum, inbuflen, di->inst_id);
 
+    /* Create worker thread if not yet created — dispatch via vtable */
     if (!di->thread_handle) {
         srd_dbg("No worker thread for this decoder stack "
                 "exists yet, creating one: %s.",
             di->inst_id);
-
         di->thread_handle = g_thread_new(di->inst_id,
-            di_thread, di);
+            (GThreadFunc)di_ops(di)->decode_thread, di);
     }
 
     g_mutex_lock(&di->data_mutex);
@@ -1663,9 +1779,14 @@ SRD_PRIV int srd_inst_decode(struct srd_decoder_inst* di,
         g_cond_wait(&di->handled_all_samples_cond, &di->data_mutex);
     g_mutex_unlock(&di->data_mutex);
 
-    if (di->python_proc_error) {
-        *error = di->python_proc_error;
-        di->python_proc_error = NULL;
+    /* Extract error via vtable (handles both C error_message and Python python_proc_error) */
+    char *err_msg = di_ops(di)->extract_error(di);
+    if (err_msg) {
+        srd_set_last_error(err_msg);
+        if (error)
+            *error = err_msg;
+        else
+            g_free(err_msg);
         return SRD_ERR_TERM_REQ;
     }
 
@@ -1692,8 +1813,6 @@ SRD_PRIV int srd_inst_decode(struct srd_decoder_inst* di,
  */
 SRD_PRIV int srd_inst_terminate_reset(struct srd_decoder_inst* di)
 {
-    PyGILState_STATE gstate;
-    PyObject* py_ret;
     GSList* l;
     int ret;
 
@@ -1704,18 +1823,8 @@ SRD_PRIV int srd_inst_terminate_reset(struct srd_decoder_inst* di)
     srd_inst_join_decode_thread(di);
     srd_inst_reset_state(di);
 
-    if (di->is_c_inst) {
-        if (di->c_dec_inst && di->c_dec_inst->reset)
-            di->c_dec_inst->reset(di);
-    } else {
-        gstate = PyGILState_Ensure();
-        if (PyObject_HasAttrString(di->py_inst, "reset")) {
-            srd_dbg("Calling reset() of instance %s", di->inst_id);
-            py_ret = PyObject_CallMethod(di->py_inst, "reset", NULL);
-            Py_XDECREF(py_ret);
-        }
-        PyGILState_Release(gstate);
-    }
+    /* Dispatch reset to C or Python via vtable */
+    di_ops(di)->call_reset(di);
 
     /* Pass the "restart" request to all stacked decoders. */
     for (l = di->next_di; l; l = l->next) {
@@ -1732,7 +1841,6 @@ SRD_PRIV void srd_inst_free(struct srd_decoder_inst* di)
 {
     GSList* l;
     struct srd_pd_output* pdo;
-    PyGILState_STATE gstate;
 
     srd_dbg("Freeing instance %s.", di->inst_id);
 
@@ -1742,29 +1850,8 @@ SRD_PRIV void srd_inst_free(struct srd_decoder_inst* di)
 
     srd_inst_reset_state(di);
 
-    if (di->is_c_inst) {
-        if (di->c_dec_inst && di->c_dec_inst->destroy)
-            di->c_dec_inst->destroy(di);
-        if (di->error_message) {
-            g_free(di->error_message);
-            di->error_message = NULL;
-        }
-        if (di->c_options) {
-            g_hash_table_destroy(di->c_options);
-            di->c_options = NULL;
-        }
-        if (di->c_pin_cache) {
-            g_free(di->c_pin_cache);
-            di->c_pin_cache = NULL;
-        }
-    } else {
-        gstate = PyGILState_Ensure();
-        Py_DecRef(di->py_inst);
-        if (di->py_pinvalues) {
-            Py_DecRef(di->py_pinvalues);
-        }
-        PyGILState_Release(gstate);
-    }
+    /* Free C-specific or Python-specific resources via vtable */
+    di_ops(di)->free_resources(di);
 
     g_free(di->inst_id);
     g_free(di->dec_channelmap);

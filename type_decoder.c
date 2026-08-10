@@ -1342,23 +1342,62 @@ err:
 
 //------------------------------------------------------- construct
 
+PyDoc_STRVAR(Decoder_put_doc,
+	"Put an annotation for the specified span of samples.\n"
+	"\n"
+	"Arguments: start and end sample number, stream id, annotation data.\n"
+	"Annotation data's layout depends on the output stream type."
+);
+
+PyDoc_STRVAR(Decoder_register_doc,
+	"Register a new output stream.\n"
+	"\n"
+	"Arguments: output type, protocol id (for OUTPUT_PROTO),\n"
+	"optional metadata type/name/description (for OUTPUT_META)."
+);
+
+PyDoc_STRVAR(Decoder_wait_doc,
+	"Wait for one or more conditions to occur.\n"
+	"\n"
+	"Arguments: list of conditions. Each condition is a list of\n"
+	"(channel, term_type) tuples. Returns (samplenum, matched)."
+);
+
+PyDoc_STRVAR(Decoder_has_channel_doc,
+	"Report whether a channel was supplied.\n"
+	"\n"
+	"Arguments: channel index.\n"
+	"Returns: True if the channel was supplied, False otherwise."
+);
+
+PyDoc_STRVAR(Decoder_printlog_doc,
+	"Print a string from Python to the srd log output.\n"
+	"\n"
+	"Arguments: string to print."
+);
+
 static PyMethodDef Decoder_methods[] = {
-    { "put", Decoder_put, METH_VARARGS,
-        "Accepts a dictionary with the following keys: startsample, endsample, data" },
-
-    { "register", (PyCFunction)((void*)&Decoder_register), METH_VARARGS | METH_KEYWORDS,
-        "Register a new output stream" },
-
-    { "wait", Decoder_wait, METH_VARARGS,
-        "Wait for one or more conditions to occur" },
-
-    { "has_channel", Decoder_has_channel, METH_VARARGS,
-        "Report whether a channel was supplied" },
-
-    { "printlog", Decoder_printlog, METH_VARARGS,
-        "Print string from python" },
-
-    { NULL, NULL, 0, NULL }
+	{ "put",
+	  Decoder_put, METH_VARARGS,
+	  Decoder_put_doc,
+	},
+	{ "register",
+	  (PyCFunction)(void(*)(void))Decoder_register, METH_VARARGS | METH_KEYWORDS,
+	  Decoder_register_doc,
+	},
+	{ "wait",
+	  Decoder_wait, METH_VARARGS,
+	  Decoder_wait_doc,
+	},
+	{ "has_channel",
+	  Decoder_has_channel, METH_VARARGS,
+	  Decoder_has_channel_doc,
+	},
+	{ "printlog",
+	  Decoder_printlog, METH_VARARGS,
+	  Decoder_printlog_doc,
+	},
+	ALL_ZERO,
 };
 
 /**
