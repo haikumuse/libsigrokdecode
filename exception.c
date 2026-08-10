@@ -93,7 +93,7 @@ SRD_PRIV void srd_exception_catch(char **error, const char *format, ...)
 	va_list args;
 	PyObject *py_etype, *py_evalue, *py_etraceback;
 	PyObject *py_mod, *py_func, *py_tracefmt;
-	char *msg, *etype_name, *evalue_str, *outstr;
+	char *msg, *etype_name, *evalue_str, *outstr = NULL;
 	const char *etype_name_fallback;
 	PyGILState_STATE gstate;
 	GString *s;

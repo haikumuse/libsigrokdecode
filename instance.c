@@ -439,9 +439,24 @@ static gpointer c_di_thread(gpointer data);
 }
  static void py_join_thread(struct srd_decoder_inst *di)
 {
-	srd_dbg("%s: Python decoder runs synchronously, no thread to join.", di->inst_id);
+	if (!di->thread_handle)
+		return;
+	srd_dbg("%s: Joining Python decoder thread.", di->inst_id);
+	g_mutex_lock(&di->data_mutex);
 	di->want_wait_terminate = TRUE;
 	di->is_task_stop_signal = TRUE;
+	g_cond_signal(&di->got_new_samples_cond);
+	g_mutex_unlock(&di->data_mutex);
+	srd_dbg("%s: Running join().", di->inst_id);
+	(void)g_thread_join(di->thread_handle);
+	srd_dbg("%s: Call to join() done.", di->inst_id);
+	di->thread_handle = NULL;
+	g_cond_clear(&di->got_new_samples_cond);
+	g_cond_init(&di->got_new_samples_cond);
+	g_cond_clear(&di->handled_all_samples_cond);
+	g_cond_init(&di->handled_all_samples_cond);
+	g_mutex_clear(&di->data_mutex);
+	g_mutex_init(&di->data_mutex);
 }
  const struct srd_inst_ops py_inst_ops = {
 	.call_start     = py_call_start,
@@ -1383,9 +1398,12 @@ static gpointer di_thread(gpointer data)
 		di->decoder_state = SRD_ERR;
  		if (PyUnicode_Check(py_res)) {
 			PyObject* py_bytes = PyUnicode_AsUTF8String(py_res);
-			char* err_str = PyBytes_AsString(py_bytes);
-			srd_err("python method decode() returns an error:\n %s", err_str);
-			di->python_proc_error = g_strdup(err_str);
+			if (py_bytes) {
+				char* err_str = PyBytes_AsString(py_bytes);
+				srd_err("python method decode() returns an error:\n %s", err_str);
+				di->python_proc_error = g_strdup(err_str);
+				Py_DECREF(py_bytes);
+			}
 		} else {
 			di->python_proc_error = g_strdup("python method decode() returns an unknown type error!");
 		}
@@ -1588,7 +1606,12 @@ SRD_PRIV void srd_inst_free(struct srd_decoder_inst* di)
 	}
  	srd_inst_reset_state(di);
  	/* Free C-specific or Python-specific resources via vtable */
-	di_ops(di)->free_resources(di);
+ 	di_ops(di)->free_resources(di);
+ 	/* Clean up cond/mutex that were initialised in srd_inst_new()/create_c_decoder_inst().
+	 * Must be done AFTER the worker thread has been joined (above). */
+	g_cond_clear(&di->got_new_samples_cond);
+	g_cond_clear(&di->handled_all_samples_cond);
+	g_mutex_clear(&di->data_mutex);
  	g_free(di->inst_id);
 	g_free(di->dec_channelmap);
 	g_slist_free(di->next_di);

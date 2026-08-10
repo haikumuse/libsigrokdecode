@@ -19,9 +19,27 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
  */
-  #include "log.h"
+ #include "log.h"
 #include <stdarg.h>
  #define LOG_DOMAIN  "srd"
+/*
+ * Thread-safety note:
+ * srd_xlog, log_level_value, user_log_cb and user_log_cb_data are global
+ * state that is accessed from multiple decoder worker threads.  The design
+ * contract is:
+ *  - srd_log_set_context(), srd_log_init/uninit(), and srd_log_callback_set()
+ *    are called ONLY during srd_init()/srd_exit(), which run single-threaded
+ *    before any decoder worker threads exist.
+ *  - srd_log_loglevel_set() may be called at runtime, but log_level_value
+ *    is a plain int whose read/write is atomic on all supported platforms
+ *    (x86, ARM, x86_64, aarch64).  A stale read only causes a wrong filter
+ *    decision for a single log call, which is acceptable.
+ *  - srd_log() (the hot path) only reads these globals and never writes them,
+ *    so there is no data race in practice.
+ *
+ * If the contract ever changes (e.g. srd_log_set_context() called at runtime
+ * with active decoder threads), a GRWLock or GMutex must be added here.
+ */
  xlog_writer *srd_xlog = NULL;
 static xlog_context *log_ctx = NULL; /* private log context */
 static int is_private_log = 0;
