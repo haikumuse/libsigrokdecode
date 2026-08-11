@@ -372,7 +372,11 @@ static gpointer c_di_thread(gpointer data);
 		goto err_out;
 	Py_DECREF(py_di_options);
 	py_di_options = PyDict_New();
+	if (!py_di_options)
+		goto err_out;
 	PyObject_SetAttrString(di->py_inst, "options", py_di_options);
+	/* Note: do NOT DECREF py_di_options here — the for loop below
+	 * uses it to insert items. Cleanup is in err_out via Py_XDECREF. */
  	for (l = di->decoder->options; l; l = l->next) {
 		sdo = l->data;
 		value = NULL;
@@ -415,6 +419,10 @@ static gpointer c_di_thread(gpointer data);
 		}
 		if (PyDict_SetItemString(py_di_options, sdo->id, py_optval) == -1)
 			goto err_out;
+		/* PyDict_SetItemString increments py_optval's refcount.
+		 * Release our reference — the dict owns it now. */
+		Py_DECREF(py_optval);
+		py_optval = NULL;
 		if (options) {
 			g_hash_table_remove(options, sdo->id);
 		}
@@ -424,6 +432,7 @@ static gpointer c_di_thread(gpointer data);
  	ret = SRD_OK;
  err_out:
 	Py_XDECREF(py_optval);
+	Py_XDECREF(py_di_options);
 	if (PyErr_Occurred()) {
 		srd_exception_catch(NULL, "Stray exception in srd_inst_option_set()");
 		ret = SRD_ERR_PYTHON;
@@ -798,6 +807,13 @@ SRD_API struct srd_decoder_inst* srd_inst_new(struct srd_session* sess,
 	}
  	/* Default to the initial pins being the same as in sample 0. */
 	oldpins_array_seed(di);
+	/*
+	 * Set the vtable BEFORE any call that dispatches through di_ops().
+	 * srd_inst_option_set() below uses di_ops(di)->option_set, so ops
+	 * must be set here. (Bug: previously ops was set ~20 lines later,
+	 * causing a NULL-pointer dereference on first Python decoder creation.)
+	 */
+	di->ops = &py_inst_ops;
  	/* Create a new instance of this decoder class. */
 	if (!(di->py_inst = PyObject_CallObject(dec->py_dec, NULL))) {
 		if (PyErr_Occurred())
@@ -824,7 +840,6 @@ SRD_API struct srd_decoder_inst* srd_inst_new(struct srd_session* sess,
 	di->python_proc_error = NULL;
 	di->is_task_stop_signal = FALSE;
  	di->is_c_inst = FALSE;
-	di->ops = &py_inst_ops;
  	/*
 	 * Strictly speaking initialization of statically allocated
 	 * condition and mutex variables (or variables allocated on the
@@ -840,6 +855,10 @@ SRD_API struct srd_decoder_inst* srd_inst_new(struct srd_session* sess,
  	return di;
  err:
 	PyGILState_Release(gstate);
+	Py_XDECREF(di->py_pinvalues);
+	di->py_pinvalues = NULL;
+	oldpins_array_free(di);
+	g_free(di->inst_id);
 	g_free(di->dec_channelmap);
 	g_free(di);
 	return NULL;

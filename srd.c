@@ -135,6 +135,8 @@ extern SRD_PRIV GRWLock sessions_rwlock;
 	for (i = 0; i < PyList_Size(py_paths); i++) {
 		py_path = PyList_GetItem(py_paths, i);
 		py_bytes = PyUnicode_AsUTF8String(py_path);
+		if (!py_bytes)
+			continue;
 		g_string_append_printf(s, " - %s\n", PyBytes_AsString(py_bytes));
 		Py_DECREF(py_bytes);
 	}
