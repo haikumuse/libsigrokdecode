@@ -98,6 +98,7 @@ SRD_PRIV void srd_exception_catch(char **error, const char *format, ...)
 	PyGILState_STATE gstate;
 	GString *s;
 	char *final_msg;
+	char *error_msg = NULL;  /* pre-allocated copy, safe from log-chain alloc reuse */
 
 	py_etype = py_evalue = py_etraceback = py_mod = py_func = NULL;
 
@@ -111,6 +112,7 @@ SRD_PRIV void srd_exception_catch(char **error, const char *format, ...)
 	if (!py_etype) {
 		/* No current exception, so just print the message. */
 		final_msg = g_strjoin(":", msg, "unknown error", NULL);
+		error_msg = g_strdup(final_msg);  /* copy BEFORE srd_err (TSan: UAF guard) */
 		srd_err("%s.", final_msg);
 		goto cleanup;
 	}
@@ -128,6 +130,7 @@ SRD_PRIV void srd_exception_catch(char **error, const char *format, ...)
 	g_free(evalue_str);
 	g_free(etype_name);
 
+	error_msg = g_strdup(final_msg);  /* copy BEFORE srd_err (TSan: UAF guard) */
 	srd_err("%s.", final_msg);
 
 	/* If there is no traceback object, we are done. */
@@ -163,12 +166,16 @@ SRD_PRIV void srd_exception_catch(char **error, const char *format, ...)
 
 cleanup:
 	if (error)
-		*error = g_strdup(final_msg);
+		*error = g_strdup(error_msg ? error_msg : final_msg);
 	/*
 	 * Always set the thread-local last error, so callers that don't
 	 * pass &error can still retrieve the message via srd_get_last_error().
+	 * Use _take variant to transfer ownership of error_msg (avoids
+	 * double g_strdup and potential UAF from log-chain allocator reuse).
 	 */
-	if (final_msg)
+	if (error_msg)
+		srd_set_last_error_take(error_msg);
+	else if (final_msg)
 		srd_set_last_error(final_msg);
 	Py_XDECREF(py_func);
 	Py_XDECREF(py_mod);
@@ -183,4 +190,5 @@ cleanup:
 
 	g_free(msg);
 	g_free(final_msg);
+	/* error_msg was transferred to srd_set_last_error_take or freed above */
 }
