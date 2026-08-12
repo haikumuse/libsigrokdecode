@@ -2,7 +2,6 @@
  * This file is part of the PXView project.
  *
  * Copyright (C) 2018 Steve R <steversig@virginmedia.com>
- * Copyright (C) 2024 DreamSourceLab <info@dreamsourcelab.com>
  * Copyright (C) 2025 C port (v4 API)
  *
  * This program is free software; you can redistribute it and/or modify

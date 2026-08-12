@@ -10,7 +10,6 @@
  *
  * Exit codes: 0 = PASS, 1 = FAIL, 2 = error
  *
- * Copyright (C) 2026 DreamSourceLab <support@dreamsourcelab.com>
  * License: GPLv3+
  */
 
