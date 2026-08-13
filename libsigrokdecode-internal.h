@@ -25,15 +25,17 @@
 /*
  * Use the stable ABI subset as per PEP 384.
  *
- * Free-threaded Python (PEP 703, Python 3.13t) defines Py_GIL_DISABLED
- * at compile time. When building against free-threaded Python, we bump
- * Py_LIMITED_API to 3.13 to access the newer API surface. When building
- * against standard GIL Python, we keep 3.2 for maximum compatibility.
+ * Free-threaded Python (PEP 703, Python 3.13t+) does NOT support the
+ * limited API — Python.h emits a hard #error if Py_LIMITED_API is defined.
+ * SRD_FREE_THREADED_PYTHON is set by CMake (deps.cmake) when it detects
+ * Py_GIL_DISABLED in the Python headers at configure time. When set,
+ * we use the full C API instead of the limited ABI.
+ *
+ * Note: We cannot check Py_GIL_DISABLED directly here because it is
+ * defined by pyconfig.h which is included BY Python.h — i.e., not yet
+ * defined at this point in the file.
  */
-#ifdef Py_GIL_DISABLED
-# undef Py_LIMITED_API
-# define Py_LIMITED_API 0x030D0000  /* Python 3.13 stable ABI */
-#else
+#ifndef SRD_FREE_THREADED_PYTHON
 # define Py_LIMITED_API 0x03020000  /* Python 3.2 stable ABI */
 #endif
 

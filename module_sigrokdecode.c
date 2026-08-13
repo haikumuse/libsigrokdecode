@@ -42,6 +42,13 @@ PyMODINIT_FUNC PyInit_sigrokdecode(void)
  	mod = PyModule_Create(&sigrokdecode_module);
 	if (!mod)
 		goto err_out;
+
+	/* Declare support for free-threaded Python (PEP 703).
+	 * Without this, Python re-enables the GIL when importing this module,
+	 * causing a mixed GIL/no-GIL state that leads to heap corruption. */
+#ifdef Py_GIL_DISABLED
+	PyUnstable_Module_SetGIL(mod, Py_MOD_GIL_NOT_USED);
+#endif
  	Decoder_type = srd_Decoder_type_new();
 	if (!Decoder_type)
 		goto err_out;
