@@ -416,6 +416,26 @@ struct srd_decoder_inst {
   GCond handled_all_samples_cond;
   GMutex data_mutex;
 
+  /* Free-threaded Python (PEP 703) support: explicit locks for shared
+   * state that was previously protected implicitly by the GIL.
+   * These are always present (not just under Py_GIL_DISABLED) because
+   * they are cheap, correct in both GIL and free-threaded modes, and
+   * avoid #ifdef sprawl. In GIL mode they are redundant but harmless. */
+
+  /** Protects py_pinvalues (modified in get_current_pinvalues, read in
+   *  Decoder_wait return path). */
+  GMutex py_pinvalues_mutex;
+
+  /** Protects python_proc_error (written in di_thread, read in
+   *  py_extract_error). */
+  GMutex error_mutex;
+
+  /** Protects pd_output list (modified in Decoder_register, read in
+   *  Decoder_put). In practice register() only runs during start() before
+   *  decode threads begin, but the lock ensures correctness if that
+   *  assumption(assumption) ever changes. */
+  GMutex pd_output_mutex;
+
   char *python_proc_error;
 
   /** the task normal ends flag */

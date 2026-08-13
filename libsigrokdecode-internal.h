@@ -22,8 +22,20 @@
 #ifndef LIBSIGROKDECODE_LIBSIGROKDECODE_INTERNAL_H
 #define LIBSIGROKDECODE_LIBSIGROKDECODE_INTERNAL_H
 
-/* Use the stable ABI subset as per PEP 384. */
-#define Py_LIMITED_API 0x03020000
+/*
+ * Use the stable ABI subset as per PEP 384.
+ *
+ * Free-threaded Python (PEP 703, Python 3.13t) defines Py_GIL_DISABLED
+ * at compile time. When building against free-threaded Python, we bump
+ * Py_LIMITED_API to 3.13 to access the newer API surface. When building
+ * against standard GIL Python, we keep 3.2 for maximum compatibility.
+ */
+#ifdef Py_GIL_DISABLED
+# undef Py_LIMITED_API
+# define Py_LIMITED_API 0x030D0000  /* Python 3.13 stable ABI */
+#else
+# define Py_LIMITED_API 0x03020000  /* Python 3.2 stable ABI */
+#endif
 
 #include <Python.h> /* First, so we avoid a _POSIX_C_SOURCE warning. */
 #include "libsigrokdecode.h"
@@ -152,6 +164,13 @@ static inline const struct srd_inst_ops *srd_di_ops(const struct srd_decoder_ins
 
 /* decoder.c */
 SRD_PRIV long srd_decoder_apiver(const struct srd_decoder *d);
+
+/* Free-threaded Python (PEP 703) support: mutex protecting the global
+ * pd_list in decoder.c. Previously the GIL serialised all accesses to
+ * pd_list (srd_decoder_load, srd_decoder_unload, srd_decoder_list,
+ * srd_decoder_get_by_id). Without a GIL, explicit locking is required.
+ * The mutex is defined in decoder.c and initialised in srd_init(). */
+SRD_PRIV extern GMutex pd_list_mutex;
 
 /* type_decoder.c */
 SRD_PRIV PyObject *srd_Decoder_type_new(void);

@@ -432,12 +432,15 @@ static inline struct srd_decoder_inst* srd_inst_find_by_obj(
 		 */
 		goto err;
 	}
- 	if (!(l = g_slist_nth(di->pd_output, output_id))) {
+ 	g_mutex_lock(&di->pd_output_mutex);
+	if (!(l = g_slist_nth(di->pd_output, output_id))) {
+		g_mutex_unlock(&di->pd_output_mutex);
 		srd_err("Protocol decoder %s submitted invalid output ID %d.",
 			di->decoder->name, output_id);
 		goto err;
 	}
 	pdo = l->data;
+	g_mutex_unlock(&di->pd_output_mutex);
  	/* Upon SRD_OUTPUT_PYTHON for stacked PDs, we have a nicer log message later. */
 	if (pdo->output_type != SRD_OUTPUT_PYTHON && di->next_di != NULL) {
 		srd_detail("Instance %s put %" PRIu64 "-%" PRIu64 " %s on "
@@ -629,6 +632,7 @@ static PyObject* Decoder_register(PyObject* self, PyObject* args,
 		}
 	}
  	pdo = NULL;
+	g_mutex_lock(&di->pd_output_mutex);
 	for (l = di->pd_output; l; l = l->next) {
 		cmp = l->data;
 		if (cmp->output_type != output_type)
@@ -646,6 +650,7 @@ static PyObject* Decoder_register(PyObject* self, PyObject* args,
 	}
  	if (pdo) {
 		py_new_output_id = Py_BuildValue("i", pdo->pdo_id);
+		g_mutex_unlock(&di->pd_output_mutex);
 		PyGILState_Release(gstate);
 		return py_new_output_id;
 	}
@@ -669,6 +674,7 @@ static PyObject* Decoder_register(PyObject* self, PyObject* args,
 	}
  	di->pd_output = g_slist_append(di->pd_output, pdo);
 	py_new_output_id = Py_BuildValue("i", pdo->pdo_id);
+ 	g_mutex_unlock(&di->pd_output_mutex);
  	PyGILState_Release(gstate);
  	srd_dbg("Instance %s creating new output type %s as oid %d (%s).",
 		di->inst_id, output_type_name(output_type), pdo->pdo_id,
@@ -757,8 +763,10 @@ static int get_current_pinvalues(struct srd_decoder_inst* di)
 		PyTuple_SetItem(new_tuple, i, new_val);
 	}
  	Py_DECREF(di->py_pinvalues);
+	g_mutex_lock(&di->py_pinvalues_mutex);
 	di->py_pinvalues = new_tuple;
- 	PyGILState_Release(gstate);
+	g_mutex_unlock(&di->py_pinvalues_mutex);
+ PyGILState_Release(gstate);
  	return SRD_OK;
 }
  /**
@@ -1017,8 +1025,11 @@ static int set_skip_condition(struct srd_decoder_inst* di, uint64_t count)
  			get_current_pinvalues(di);
  			g_mutex_unlock(&di->data_mutex);
  			PyGILState_Release(gstate);
+ 			g_mutex_lock(&di->py_pinvalues_mutex);
  			Py_INCREF(di->py_pinvalues);
-			return (PyObject*)di->py_pinvalues;
+			PyObject *ret = (PyObject*)di->py_pinvalues;
+			g_mutex_unlock(&di->py_pinvalues_mutex);
+			return ret;
 		}
  		di->got_new_samples = FALSE;
 		di->handled_all_samples = TRUE;

@@ -442,8 +442,11 @@ static gpointer c_di_thread(gpointer data);
 }
  static char *py_extract_error(struct srd_decoder_inst *di)
 {
-	char *msg = di->python_proc_error;
+	char *msg;
+	g_mutex_lock(&di->error_mutex);
+	msg = di->python_proc_error;
 	di->python_proc_error = NULL;
+	g_mutex_unlock(&di->error_mutex);
 	return msg;
 }
  static void py_join_thread(struct srd_decoder_inst *di)
@@ -716,10 +719,14 @@ SRD_PRIV struct srd_decoder_inst* create_c_decoder_inst(struct srd_session* sess
 	di->c_options = NULL;
 	di->runtime = &c_decoder_runtime;
 	di->ops = &c_inst_ops;
- 	g_cond_init(&di->got_new_samples_cond);
-	g_cond_init(&di->handled_all_samples_cond);
-	g_mutex_init(&di->data_mutex);
- 	if (options && srd_inst_option_set(di, options) != SRD_OK) {
+ 	 g_cond_init(&di->got_new_samples_cond);
+ g_cond_init(&di->handled_all_samples_cond);
+ g_mutex_init(&di->data_mutex);
+ g_mutex_init(&di->py_pinvalues_mutex);
+ g_mutex_init(&di->error_mutex);
+ g_mutex_init(&di->pd_output_mutex);
+
+ if (options && srd_inst_option_set(di, options) != SRD_OK) {
 		srd_err("%s,ERROR:failed to set options.", __func__);
 		g_free(di->dec_channelmap);
 		g_free(di->inst_id);
@@ -846,12 +853,16 @@ SRD_API struct srd_decoder_inst* srd_inst_new(struct srd_session* sess,
 	 * stack) is not required, but won't harm either. Explicitly
 	 * running init() will better match subsequent clear() calls.
 	 */
-	g_cond_init(&di->got_new_samples_cond);
-	g_cond_init(&di->handled_all_samples_cond);
-	g_mutex_init(&di->data_mutex);
- 	/* Instance takes input from a frontend by default. */
-	sess->di_list = g_slist_append(sess->di_list, di);
-	srd_dbg("Creating new %s instance %s.", decoder_id, di->inst_id);
+	 g_cond_init(&di->got_new_samples_cond);
+ g_cond_init(&di->handled_all_samples_cond);
+ g_mutex_init(&di->data_mutex);
+ g_mutex_init(&di->py_pinvalues_mutex);
+ g_mutex_init(&di->error_mutex);
+ g_mutex_init(&di->pd_output_mutex);
+
+ /* Instance takes input from a frontend by default. */
+ sess->di_list = g_slist_append(sess->di_list, di);
+ srd_dbg("Creating new %s instance %s.", decoder_id, di->inst_id);
  	return di;
  err:
 	PyGILState_Release(gstate);
@@ -1414,22 +1425,34 @@ static gpointer di_thread(gpointer data)
 	srd_dbg("%s: decode() terminated.", di->inst_id);
  	is_task_stop_signal = di->is_task_stop_signal;
  	if (py_res) {
+		g_mutex_lock(&di->data_mutex);
 		di->decoder_state = SRD_ERR;
+		g_mutex_unlock(&di->data_mutex);
  		if (PyUnicode_Check(py_res)) {
 			PyObject* py_bytes = PyUnicode_AsUTF8String(py_res);
 			if (py_bytes) {
 				char* err_str = PyBytes_AsString(py_bytes);
 				srd_err("python method decode() returns an error:\n %s", err_str);
+				g_mutex_lock(&di->error_mutex);
 				di->python_proc_error = g_strdup(err_str);
+				g_mutex_unlock(&di->error_mutex);
 				Py_DECREF(py_bytes);
 			}
 		} else {
+			g_mutex_lock(&di->error_mutex);
 			di->python_proc_error = g_strdup("python method decode() returns an unknown type error!");
+			g_mutex_unlock(&di->error_mutex);
 		}
  		Py_DecRef(py_res);
 	}
  	if (!py_res && !is_task_stop_signal) {
-		srd_exception_catch(&di->python_proc_error, "Protocol decoder instance %s: ", di->inst_id);
+		char *err = NULL;
+		srd_exception_catch(&err, "Protocol decoder instance %s: ", di->inst_id);
+		if (err) {
+			g_mutex_lock(&di->error_mutex);
+			di->python_proc_error = err;
+			g_mutex_unlock(&di->error_mutex);
+		}
 	}
  	g_mutex_lock(&di->data_mutex);
 	wanted_term = di->want_wait_terminate;
@@ -1532,10 +1555,15 @@ SRD_PRIV int srd_inst_decode(struct srd_decoder_inst* di,
 		srd_set_last_error("empty buffer");
 		return SRD_ERR_ARG;
 	}
+	/* Lock early to protect di->first_pos and di->abs_cur_samplenum
+	 * accesses in free-threaded Python (PEP 703). In GIL mode the GIL
+	 * would have protected these; without it, explicit locking is needed. */
+	g_mutex_lock(&di->data_mutex);
  	if (di->first_pos) {
 		di->abs_cur_samplenum = abs_start_samplenum;
 	}
  	if (abs_start_samplenum != di->abs_cur_samplenum || abs_end_samplenum < abs_start_samplenum) {
+		g_mutex_unlock(&di->data_mutex);
 		srd_dbg("Incorrect sample numbers: start=%" PRIu64 ", cur=%" PRIu64 ", end=%" PRIu64 ".",
 			abs_start_samplenum, di->abs_cur_samplenum, abs_end_samplenum);
 		return SRD_ERR_ARG;
@@ -1551,8 +1579,7 @@ SRD_PRIV int srd_inst_decode(struct srd_decoder_inst* di,
 		di->thread_handle = g_thread_new(di->inst_id,
 			(GThreadFunc)di_ops(di)->decode_thread, di);
 	}
- 	g_mutex_lock(&di->data_mutex);
-	di->abs_start_samplenum = abs_start_samplenum & ~7ULL;
+ 	di->abs_start_samplenum = abs_start_samplenum & ~7ULL;
 	di->abs_end_samplenum = abs_end_samplenum;
 	di->inbuf = inbuf;
 	di->inbuf_const = inbuf_const;
@@ -1626,11 +1653,14 @@ SRD_PRIV void srd_inst_free(struct srd_decoder_inst* di)
  	srd_inst_reset_state(di);
  	/* Free C-specific or Python-specific resources via vtable */
  	di_ops(di)->free_resources(di);
- 	/* Clean up cond/mutex that were initialised in srd_inst_new()/create_c_decoder_inst().
+ /* Clean up cond/mutex that were initialised in srd_inst_new()/create_c_decoder_inst().
 	 * Must be done AFTER the worker thread has been joined (above). */
-	g_cond_clear(&di->got_new_samples_cond);
-	g_cond_clear(&di->handled_all_samples_cond);
-	g_mutex_clear(&di->data_mutex);
+ g_cond_clear(&di->got_new_samples_cond);
+ g_cond_clear(&di->handled_all_samples_cond);
+ g_mutex_clear(&di->data_mutex);
+ g_mutex_clear(&di->py_pinvalues_mutex);
+ g_mutex_clear(&di->error_mutex);
+ g_mutex_clear(&di->pd_output_mutex);
  	g_free(di->inst_id);
 	g_free(di->dec_channelmap);
 	g_slist_free(di->next_di);

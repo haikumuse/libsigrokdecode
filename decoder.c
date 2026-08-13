@@ -47,6 +47,12 @@
 		Is srd_decoder* type
 */
 static GSList* pd_list = NULL;
+
+/* Free-threaded Python (PEP 703) support: mutex protecting pd_list.
+ * Declared as extern in libsigrokdecode-internal.h, initialised in
+ * srd_init(), cleared in srd_exit(). Previously the GIL serialised all
+ * accesses; without a GIL, explicit locking is required. */
+GMutex pd_list_mutex;
  /* srd.c */
 extern SRD_PRIV GSList* searchpaths;
  /* session.c */
@@ -164,12 +170,17 @@ SRD_API struct srd_decoder* srd_decoder_get_by_id(const char* id)
 {
 	GSList* l;
 	struct srd_decoder* dec;
- 	for (l = pd_list; l; l = l->next) {
+	struct srd_decoder* result = NULL;
+ 	g_mutex_lock(&pd_list_mutex);
+	for (l = pd_list; l; l = l->next) {
 		dec = l->data;
-		if (!strcmp(dec->id, id))
-			return dec;
+		if (!strcmp(dec->id, id)) {
+			result = dec;
+			break;
+		}
 	}
- 	return NULL;
+ 	g_mutex_unlock(&pd_list_mutex);
+	return result;
 }
  static void channel_free(void* data)
 {
@@ -868,7 +879,9 @@ SRD_API int srd_decoder_load(const char* module_name)
 	}
  	PyGILState_Release(gstate);
  	/* Append it to the list of loaded decoders. */
+	g_mutex_lock(&pd_list_mutex);
 	pd_list = g_slist_append(pd_list, d);
+	g_mutex_unlock(&pd_list_mutex);
  	return SRD_OK;
  except_out:
 	/* Don't show a message for the "common" directory, it's not a PD. */
@@ -952,8 +965,10 @@ SRD_API int srd_decoder_unload(struct srd_decoder* dec)
 		srd_inst_free_all(sess);
 	}
  	/* Remove the PD from the list of loaded decoders. */
+	g_mutex_lock(&pd_list_mutex);
 	pd_list = g_slist_remove(pd_list, dec);
  	decoder_free(dec);
+	g_mutex_unlock(&pd_list_mutex);
  	return SRD_OK;
 }
  static void srd_decoder_load_all_zip_path(char* zip_path)

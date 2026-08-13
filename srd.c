@@ -188,8 +188,25 @@ SRD_API int srd_init(const char* path)
 		srd_err("libsigrokdecode is already initialized.");
 		return SRD_ERR;
 	}
- 	srd_dbg("Initializing libsigrokdecode.");
- 	g_rw_lock_init(&sessions_rwlock);
+ 	 srd_dbg("Initializing libsigrokdecode.");
+
+ g_rw_lock_init(&sessions_rwlock);
+
+ /* Free-threaded Python (PEP 703) support: initialise the mutex that
+  * protects the global decoder list (pd_list in decoder.c).
+  * Previously the GIL serialised all pd_list accesses; without a GIL,
+  * explicit locking is required. The mutex is cheap and harmless in
+  * GIL mode (just redundant). */
+ g_mutex_init(&pd_list_mutex);
+
+ /* Detect free-threaded Python at runtime and log the mode. */
+#ifdef Py_GIL_DISABLED
+ srd_info("libsigrokdecode built with free-threaded Python (PEP 703). "
+ "Python decoders will run truly parallel.");
+#else
+ srd_info("libsigrokdecode built with GIL Python. Python decoders "
+ "are serialised by the GIL; C decoders run in parallel.");
+#endif
  	/* Add our own module to the list of built-in modules. */
 	PyImport_AppendInittab("sigrokdecode", PyInit_sigrokdecode);
  	/* Initialize the Python interpreter. */
@@ -264,7 +281,8 @@ SRD_API int srd_init(const char* path)
 #endif
  	/* Release the GIL (ignore return value, we don't need it here). */
 	PyEval_SaveThread();
- 	max_session_id = 0;
+
+	max_session_id = 0;
  	print_searchpaths();
  	return SRD_OK;
 }
@@ -306,10 +324,11 @@ SRD_API int srd_exit(void)
  	/* Py_Finalize() returns void, any finalization errors are ignored. */
 	Py_Finalize();
  	/* Note: No need to release the GIL since Python is shut down now. */
- 	max_session_id = -1;
- 	g_rw_lock_clear(&sessions_rwlock);
- 	srd_log_uninit(); // uninit log
- 	return SRD_OK;
+ max_session_id = -1;
+ g_rw_lock_clear(&sessions_rwlock);
+ g_mutex_clear(&pd_list_mutex);
+ srd_log_uninit(); // uninit log
+ return SRD_OK;
 }
  /**
  * Add an additional search directory for the protocol decoders.
