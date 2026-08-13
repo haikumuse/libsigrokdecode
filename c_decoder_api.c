@@ -77,6 +77,11 @@ extern GSList* pd_list;
 				 "instead of c_decoder_put().",
 			di->c_dec_inst->name);
 		return SRD_ERR_ARG;
+	case SRD_OUTPUT_ANALOG:
+		_srd_err("C decoder %s: Use c_decoder_put_analog() for ANALOG output "
+				 "instead of c_decoder_put().",
+			di->c_dec_inst->name);
+		return SRD_ERR_ARG;
 	case SRD_OUTPUT_META:
 		if ((cb = srd_pd_output_callback_find_c(di, pdo->output_type))) {
 			pdata.data = ann;
@@ -157,6 +162,194 @@ extern GSList* pd_list;
 		cb->cb(&pdata, cb->cb_data);
 	}
  	return SRD_OK;
+}
+
+/* high-speed v4 packed-input API.
+ *
+ * v4 stores each decoder input channel as one bit per sample.  The producer
+ * thread is blocked in srd_inst_decode() until the C decoder marks the current
+ * chunk handled, so a decoder can safely process these pointers without a
+ * copy between c_fetch_packed_multi() and c_consume_samples().
+ */
+SRD_API uint64_t c_fetch_packed_multi(struct srd_decoder_inst *di,
+    const int *channels, const uint8_t **buffers, uint8_t *const_values,
+    int num_channels, uint64_t max_samples,
+    uint64_t *start_sample, uint8_t *bit_offset)
+{
+    uint64_t cur, off, available, count, byte_off;
+    int i, ch;
+
+    if (!di || !channels || !buffers || !const_values ||
+        num_channels <= 0 || max_samples == 0 ||
+        !start_sample || !bit_offset)
+        return 0;
+
+    g_mutex_lock(&di->data_mutex);
+    while (!di->got_new_samples && !di->want_wait_terminate)
+        g_cond_wait(&di->got_new_samples_cond, &di->data_mutex);
+
+    if (di->want_wait_terminate) {
+        g_mutex_unlock(&di->data_mutex);
+        return 0;
+    }
+
+    cur = di->abs_cur_samplenum;
+    if (cur < di->abs_start_samplenum)
+        cur = di->abs_start_samplenum;
+    if (cur >= di->abs_end_samplenum) {
+        g_mutex_unlock(&di->data_mutex);
+        return 0;
+    }
+
+    off = cur - di->abs_start_samplenum;
+    available = di->abs_end_samplenum - cur;
+    if (available == 0) {
+        g_mutex_unlock(&di->data_mutex);
+        return 0;
+    }
+
+    count = available < max_samples ? available : max_samples;
+    byte_off = off >> 3;
+    *start_sample = cur;
+    *bit_offset = (uint8_t)(off & 7u);
+
+    for (i = 0; i < num_channels; ++i) {
+        ch = channels[i];
+        buffers[i] = NULL;
+        const_values[i] = 0xFF;
+        if (ch < 0 || ch >= di->dec_num_channels ||
+            !di->dec_channelmap || di->dec_channelmap[ch] < 0)
+            continue;
+        if (!di->inbuf || !di->inbuf[ch]) {
+            const_values[i] =
+                (di->inbuf_const && di->inbuf_const[ch]) ? 1 : 0;
+        } else {
+            buffers[i] = di->inbuf[ch] + byte_off;
+            const_values[i] = 0;
+        }
+    }
+
+    di->first_pos = FALSE;
+    g_mutex_unlock(&di->data_mutex);
+    return count;
+}
+
+SRD_API int c_consume_samples(struct srd_decoder_inst *di,
+    uint64_t num_samples)
+{
+    uint64_t available;
+    int ret = SRD_OK;
+
+    if (!di)
+        return SRD_ERR_ARG;
+    if (num_samples == 0)
+        return SRD_OK;
+
+    g_mutex_lock(&di->data_mutex);
+    if (!di->got_new_samples) {
+        ret = di->want_wait_terminate ? SRD_ERR_TERM_REQ : SRD_ERR_ARG;
+        g_mutex_unlock(&di->data_mutex);
+        return ret;
+    }
+
+    available = di->abs_end_samplenum - di->abs_cur_samplenum;
+    if (num_samples > available) {
+        g_mutex_unlock(&di->data_mutex);
+        return SRD_ERR_ARG;
+    }
+
+    di->abs_cur_samplenum += num_samples;
+    di->abs_cur_matched = FALSE;
+
+    if (di->abs_cur_samplenum >= di->abs_end_samplenum ||
+        di->want_wait_terminate) {
+        di->got_new_samples = FALSE;
+        di->handled_all_samples = TRUE;
+        di->abs_start_samplenum = 0;
+        di->abs_end_samplenum = 0;
+        di->inbuf = NULL;
+        di->inbuf_const = NULL;
+        di->inbuflen = 0;
+        g_cond_signal(&di->handled_all_samples_cond);
+    }
+
+    if (di->want_wait_terminate)
+        ret = SRD_ERR_TERM_REQ;
+    g_mutex_unlock(&di->data_mutex);
+    return ret;
+}
+
+/* TDM/PWM analog port */
+SRD_API int c_decoder_put_analog(struct srd_decoder_inst* di,
+    uint64_t start_sample, uint64_t end_sample,
+    int output_id, int channel, int num_channels,
+    const float* data, uint64_t num_samples, double scale)
+{
+    struct srd_pd_output* pdo;
+    struct srd_pd_callback* cb;
+    struct srd_proto_data pdata;
+    struct srd_proto_data_analog pda;
+
+    if (!di || !data || num_samples == 0)
+        return SRD_ERR_ARG;
+    GSList* out_list = g_slist_nth(di->pd_output, output_id);
+    if (!out_list)
+        return SRD_ERR_ARG;
+    pdo = out_list->data;
+    if (pdo->output_type != SRD_OUTPUT_ANALOG)
+        return SRD_ERR_ARG;
+
+    pdata.start_sample = start_sample;
+    pdata.end_sample = end_sample;
+    pdata.pdo = pdo;
+    if ((cb = srd_pd_output_callback_find_c(di, SRD_OUTPUT_ANALOG))) {
+        pda.channel = channel;
+        pda.num_channels = num_channels;
+        pda.num_samples = num_samples;
+        pda.data = data;
+        pda.scale = scale;
+        pda.start_samples = NULL;
+        pda.end_samples = NULL;
+        pdata.data = &pda;
+        cb->cb(&pdata, cb->cb_data);
+    }
+    return SRD_OK;
+}
+
+SRD_API int c_decoder_put_analog_timed(struct srd_decoder_inst* di,
+    int output_id, int channel, int num_channels, const float* data,
+    const uint64_t* start_samples, const uint64_t* end_samples,
+    uint64_t num_samples, double scale)
+{
+    struct srd_pd_output* pdo;
+    struct srd_pd_callback* cb;
+    struct srd_proto_data pdata;
+    struct srd_proto_data_analog pda;
+
+    if (!di || !data || !start_samples || !end_samples || num_samples == 0)
+        return SRD_ERR_ARG;
+    GSList* out_list = g_slist_nth(di->pd_output, output_id);
+    if (!out_list)
+        return SRD_ERR_ARG;
+    pdo = out_list->data;
+    if (pdo->output_type != SRD_OUTPUT_ANALOG)
+        return SRD_ERR_ARG;
+
+    pdata.start_sample = start_samples[0];
+    pdata.end_sample = end_samples[num_samples - 1];
+    pdata.pdo = pdo;
+    if ((cb = srd_pd_output_callback_find_c(di, SRD_OUTPUT_ANALOG))) {
+        pda.channel = channel;
+        pda.num_channels = num_channels;
+        pda.num_samples = num_samples;
+        pda.data = data;
+        pda.scale = scale;
+        pda.start_samples = start_samples;
+        pda.end_samples = end_samples;
+        pdata.data = &pda;
+        cb->cb(&pdata, cb->cb_data);
+    }
+    return SRD_OK;
 }
  SRD_API int c_decoder_wait(struct srd_decoder_inst* di,
 	GSList* condition_list, uint64_t* samplenum, uint64_t* matched)

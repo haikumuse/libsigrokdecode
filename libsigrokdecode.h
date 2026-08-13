@@ -128,6 +128,7 @@ enum srd_output_type {
   SRD_OUTPUT_BINARY,
   SRD_OUTPUT_META,
   SRD_OUTPUT_LOGIC,
+  SRD_OUTPUT_ANALOG,  /* decoded float waveform */
 };
 /* Backward compatibility alias */
 #define SRD_OUTPUT_PYTHON SRD_OUTPUT_PROTO
@@ -211,6 +212,7 @@ typedef struct {
 
 enum srd_configkey {
   SRD_CONF_SAMPLERATE = 10000,
+  SRD_CONF_CAPTURE_SAMPLES = 10001, /* decode-region length hint */
 };
 
 enum srd_channel_type {
@@ -555,6 +557,17 @@ struct srd_proto_data_logic {
   const uint8_t *values;
 };
 
+/* decoded float waveform */
+struct srd_proto_data_analog {
+  int channel;
+  int num_channels;
+  uint64_t num_samples;
+  const float *data;
+  double scale;
+  const uint64_t *start_samples;
+  const uint64_t *end_samples;
+};
+
 typedef void (*srd_pd_output_callback)(struct srd_proto_data *pdata,
                                        void *cb_data);
 
@@ -705,6 +718,31 @@ SRD_API int c_decoder_put_logic(struct srd_decoder_inst *di,
                                 uint64_t start_sample, uint64_t end_sample,
                                 int output_id, uint32_t channel_mask,
                                 const uint8_t *values, int num_channels);
+
+/* high-speed v4 packed-input view. Buffers remain valid until
+ * c_consume_samples() releases/advances the current input chunk. */
+SRD_API uint64_t c_fetch_packed_multi(struct srd_decoder_inst *di,
+                                      const int *channels,
+                                      const uint8_t **buffers,
+                                      uint8_t *const_values,
+                                      int num_channels,
+                                      uint64_t max_samples,
+                                      uint64_t *start_sample,
+                                      uint8_t *bit_offset);
+SRD_API int c_consume_samples(struct srd_decoder_inst *di,
+                              uint64_t num_samples);
+
+SRD_API int c_decoder_put_analog(struct srd_decoder_inst *di,
+                                 uint64_t start_sample, uint64_t end_sample,
+                                 int output_id, int channel, int num_channels,
+                                 const float *data, uint64_t num_samples,
+                                 double scale);
+SRD_API int c_decoder_put_analog_timed(struct srd_decoder_inst *di,
+                                       int output_id, int channel,
+                                       int num_channels, const float *data,
+                                       const uint64_t *start_samples,
+                                       const uint64_t *end_samples,
+                                       uint64_t num_samples, double scale);
 SRD_API int c_decoder_wait(struct srd_decoder_inst *di, GSList *condition_list,
                            uint64_t *samplenum, uint64_t *matched);
 SRD_API int c_decoder_has_channel(struct srd_decoder_inst *di, int ch);
@@ -790,6 +828,8 @@ SRD_API int c_opt_bool(struct srd_decoder_inst *di, const char *key, int defval)
 #define c_put_logic  c_decoder_put_logic
 #define c_put_meta_int c_decoder_put_meta_int
 #define c_put_meta_dbl c_decoder_put_meta_double
+#define c_put_analog c_decoder_put_analog
+#define c_put_analog_timed c_decoder_put_analog_timed
 
 /* C_DECODER_STATE — auto-generates state struct, reset, and destroy */
 #define C_DECODER_STATE(name, fields) \
