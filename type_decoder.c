@@ -737,27 +737,29 @@ static int get_current_pinvalues(struct srd_decoder_inst* di)
 	}
  	for (i = 0; i < di->dec_num_channels; i++) {
 		/* A channelmap value of -1 means "unused optional channel". */
-		if (di->dec_channelmap[i] == -1 || !di->inbuf) {
+		if (di->dec_channelmap[i] == -1) {
 			/* Value of unused channel is 0xff, instead of 0 or 1.
 			   Done set -1 by srd_inst_channel_set_all()
 			*/
 			new_val = PyLong_FromLong(0xff);
+		} else if (di->read_sample) {
+			/* RLE callback mode: use read_sample callback instead of inbuf */
+			sample = di->read_sample(di, i, di->abs_cur_samplenum);
+			new_val = PyLong_FromLong(sample);
+		} else if (!di->inbuf || *(di->inbuf + i) == NULL) {
+			sample = (di->inbuf_const && *(di->inbuf_const + i)) ? 1 : 0;
+			new_val = PyLong_FromLong(sample);
 		} else {
-			if (!di->inbuf || *(di->inbuf + i) == NULL) {
-				sample = (di->inbuf_const && *(di->inbuf_const + i)) ? 1 : 0;
-				new_val = PyLong_FromLong(sample);
+			/* Defensive: skip if abs_cur_samplenum is out of range
+			 * (snapshot recycled in repeat mode). */
+			if (di->abs_cur_samplenum < di->abs_start_samplenum ||
+				di->abs_cur_samplenum >= di->abs_end_samplenum) {
+				new_val = PyLong_FromLong(0);
 			} else {
-				/* Defensive: skip if abs_cur_samplenum is out of range
-				 * (snapshot recycled in repeat mode). */
-				if (di->abs_cur_samplenum < di->abs_start_samplenum ||
-					di->abs_cur_samplenum >= di->abs_end_samplenum) {
-					new_val = PyLong_FromLong(0);
-				} else {
-					sample_pos = *(di->inbuf + i) + ((di->abs_cur_samplenum - di->abs_start_samplenum) / 8);
-					bit_offset = (di->abs_cur_samplenum - di->abs_start_samplenum) % 8;
-					sample = *sample_pos & (1 << bit_offset) ? 1 : 0;
-					new_val = PyLong_FromLong(sample);
-				}
+				sample_pos = *(di->inbuf + i) + ((di->abs_cur_samplenum - di->abs_start_samplenum) / 8);
+				bit_offset = (di->abs_cur_samplenum - di->abs_start_samplenum) % 8;
+				sample = *sample_pos & (1 << bit_offset) ? 1 : 0;
+				new_val = PyLong_FromLong(sample);
 			}
 		}
 		PyTuple_SetItem(new_tuple, i, new_val);
