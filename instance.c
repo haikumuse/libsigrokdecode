@@ -1245,7 +1245,10 @@ SRD_PRIV void condition_list_free(struct srd_decoder_inst* di)
  	ch = term->channel;
 	if (di->read_sample) {
 		sample = di->read_sample(di, ch, di->abs_cur_samplenum);
-		*skip_allow = TRUE;
+		/* skip_allow = FALSE: read_sample can access any sample, so
+		 * find_match should advance one sample at a time (not skip
+		 * to abs_end_samplenum) to properly detect edges. */
+		*skip_allow = FALSE;
 	} else if (!di->inbuf || *(di->inbuf + ch) == NULL) {
 		sample = (di->inbuf_const && *(di->inbuf_const + ch)) ? 1 : 0;
 		*skip_allow = TRUE;
