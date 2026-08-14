@@ -1599,7 +1599,14 @@ SRD_PRIV int srd_inst_decode(struct srd_decoder_inst* di,
 		di->thread_handle = g_thread_new(di->inst_id,
 			(GThreadFunc)di_ops(di)->decode_thread, di);
 	}
- 	di->abs_start_samplenum = abs_start_samplenum & ~7ULL;
+ 	/* 注意: 不能对 abs_start_samplenum 做 8 对齐 (& ~7)。
+	 * decoderstack 传入的 inbuf 由 get_samples() 展开, 其位 0 对应
+	 * 本 chunk 的绝对起点 (abs_start_samplenum), 可能不是 8 的倍数。
+	 * 若在此对齐, 所有 inbuf 路径 (term_matches / c_fetch_packed_multi /
+	 * update_old_pins_array / c_pin_cache) 的 (abs_cur - abs_start)
+	 * 偏移会错位 0-7 位, 导致快速 C 解码器 (tdm_audio_fast /
+	 * pwm_waveform_c) 在非 8 对齐解码区域读取错误数据。 */
+	di->abs_start_samplenum = abs_start_samplenum;
 	di->abs_end_samplenum = abs_end_samplenum;
 	di->inbuf = inbuf;
 	di->inbuf_const = inbuf_const;
