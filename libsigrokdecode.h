@@ -455,6 +455,22 @@ struct srd_decoder_inst {
   GHashTable *c_options;
   const struct srd_decoder_runtime *runtime;
   const void *ops; /* srd_inst_ops* — set at creation, do not modify */
+
+  /* ── read_sample 回调 (方案 B: RLE transition 存储) ──
+   *
+   * 当 read_sample 非 NULL 时, instance.c 中所有 bit 提取点
+   * 通过此回调获取采样值, 不访问 inbuf.
+   * 当 read_sample 为 NULL 时, 走原有 inbuf 路径 (向后兼容).
+   *
+   * @param di    解码器实例
+   * @param ch    通道号 (在 dec_channelmap 中的索引)
+   * @param samplenum 绝对采样号
+   * @return 0=Low, 1=High, 0xFF=通道未映射
+   */
+  uint8_t (*read_sample)(struct srd_decoder_inst *di, int ch, uint64_t samplenum);
+
+  /* read_sample 回调的上下文指针 (TransitionStore 或 LogicSnapshot 指针) */
+  void *read_sample_ctx;
 };
 
 #define SRD_C_DECODER_API_VERSION 4

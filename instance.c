@@ -78,6 +78,8 @@ extern SRD_PRIV GRWLock sessions_rwlock;
 				for (int i = 0; i < di->dec_num_channels; i++) {
 					if (di->dec_channelmap[i] < 0) {
 						di->c_pin_cache[i] = 0xFF;
+					} else if (di->read_sample) {
+						di->c_pin_cache[i] = di->read_sample(di, i, di->abs_cur_samplenum);
 					} else if (!di->inbuf || !di->inbuf[i]) {
 						di->c_pin_cache[i] = (di->inbuf_const && di->inbuf_const[i]) ? 1 : 0;
 					} else {
@@ -121,8 +123,14 @@ extern SRD_PRIV GRWLock sessions_rwlock;
 		return 0xFF;
  	if (di->c_pin_cache && samplenum == di->c_pin_cache_samplenum)
 		return di->c_pin_cache[ch];
- 	g_mutex_lock(&di->data_mutex);
- 	if (!di->inbuf || !di->inbuf[ch]) {
+ 	 g_mutex_lock(&di->data_mutex);
+ 
+	if (di->read_sample) {
+		g_mutex_unlock(&di->data_mutex);
+		return di->read_sample(di, ch, samplenum);
+	}
+ 
+	if (!di->inbuf || !di->inbuf[ch]) {
 		g_mutex_unlock(&di->data_mutex);
 		return 0;
 	}
@@ -1168,7 +1176,10 @@ SRD_PRIV void condition_list_free(struct srd_decoder_inst* di)
 		return;
  	oldpins_array_seed(di);
 	for (i = 0; i < di->dec_num_channels; i++) {
-		if (!di->inbuf || *(di->inbuf + i) == NULL) {
+		if (di->read_sample) {
+			sample = di->read_sample(di, i, di->abs_cur_samplenum);
+			di->old_pins_array->data[i] = sample;
+		} else if (!di->inbuf || *(di->inbuf + i) == NULL) {
 			sample = (di->inbuf_const && *(di->inbuf_const + i)) ? 1 : 0;
 			di->old_pins_array->data[i] = sample;
 		} else {
@@ -1197,7 +1208,10 @@ SRD_PRIV void condition_list_free(struct srd_decoder_inst* di)
 	for (i = 0; i < di->dec_num_channels; i++) {
 		if (di->old_pins_array->data[i] != SRD_INITIAL_PIN_SAME_AS_SAMPLE0)
 			continue;
- 		if (!di->inbuf || *(di->inbuf + i) == NULL) {
+ 		if (di->read_sample) {
+			sample = di->read_sample(di, i, di->abs_cur_samplenum);
+			di->old_pins_array->data[i] = sample;
+		} else if (!di->inbuf || *(di->inbuf + i) == NULL) {
 			sample = (di->inbuf_const && *(di->inbuf_const + i)) ? 1 : 0;
 			di->old_pins_array->data[i] = sample;
 		} else {
@@ -1229,7 +1243,10 @@ SRD_PRIV void condition_list_free(struct srd_decoder_inst* di)
 		return sample_matches(0, 0, term);
 	}
  	ch = term->channel;
-	if (!di->inbuf || *(di->inbuf + ch) == NULL) {
+	if (di->read_sample) {
+		sample = di->read_sample(di, ch, di->abs_cur_samplenum);
+		*skip_allow = TRUE;
+	} else if (!di->inbuf || *(di->inbuf + ch) == NULL) {
 		sample = (di->inbuf_const && *(di->inbuf_const + ch)) ? 1 : 0;
 		*skip_allow = TRUE;
 	} else {
