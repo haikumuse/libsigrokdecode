@@ -1154,12 +1154,12 @@ SRD_API int srd_decoder_unload_all(void)
 			o->idn = dec->options[i].idn ? g_strdup(dec->options[i].idn) : NULL;
 			o->desc = dec->options[i].desc ? g_strdup(dec->options[i].desc) : NULL;
 			if (dec->options[i].def) {
-				o->def = g_variant_ref(dec->options[i].def);
+				o->def = g_variant_ref_sink(dec->options[i].def);
 			}
 			if (dec->options[i].values) {
 				GSList *l;
 				for (l = dec->options[i].values; l; l = l->next) {
-					o->values = g_slist_append(o->values, g_variant_ref((GVariant*)l->data));
+					o->values = g_slist_append(o->values, g_variant_ref_sink((GVariant*)l->data));
 				}
 			}
 			d->options = g_slist_append(d->options, o);
