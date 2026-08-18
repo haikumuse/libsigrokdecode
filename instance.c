@@ -1443,6 +1443,9 @@ static gpointer di_thread(gpointer data)
  	srd_dbg("%s: Calling decode().", di->inst_id);
 	py_res = PyObject_CallMethod(di->py_inst, "decode", NULL);
 	srd_dbg("%s: decode() terminated.", di->inst_id);
+	/* 方案 E: deliver any remaining buffered annotations. */
+	if (di->sess)
+		srd_ann_batch_flush(di->sess);
  	is_task_stop_signal = di->is_task_stop_signal;
  	if (py_res) {
 		g_mutex_lock(&di->data_mutex);
@@ -1497,6 +1500,9 @@ static gpointer di_thread(gpointer data)
  	if (di->c_dec_inst->decode)
 		di->c_dec_inst->decode(di);
  	srd_dbg("%s: C decode() terminated.", di->inst_id);
+	/* 方案 E: deliver any remaining buffered annotations. */
+	if (di->sess)
+		srd_ann_batch_flush(di->sess);
  	g_mutex_lock(&di->data_mutex);
 	wanted_term = di->want_wait_terminate;
 	di->want_wait_terminate = TRUE;

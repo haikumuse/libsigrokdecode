@@ -187,9 +187,9 @@ C_DECODER_STATE(dp_aux_c, {
     uint64_t cmd_byte;
     uint64_t address_val;
     uint64_t len_minus_1;
-    uint64_t data_buf[4087];
+    uint64_t data_buf[16 * 257];
     uint64_t temp_v113[3];
-    uint64_t ann_start_samps[3];
+    uint64_t ann_start_samps[9 + 256 + 1];
     
     uint64_t samplerate;
     int out_ann;
@@ -555,7 +555,7 @@ LABEL_109:
                         s->byte_counter = 0;
                         s->data_byte_idx = 0;
                         s->state = 9;
-                        s->ann_start_samps[1] = current_samp; // Data start sample
+                        s->ann_start_samps[9] = current_samp; // Data byte 0 start sample
                         if (s->half_ui_accum == 1) s->data_buf[0] |= (uint64_t)current_bit << 19;
                     } else {
                         // Output command
@@ -584,7 +584,7 @@ LABEL_109:
                         s->data_byte_idx = 0;
                         s->byte_counter = 0;
                         s->state = 9;
-                        s->ann_start_samps[1] = current_samp; // Data start sample
+                        s->ann_start_samps[9] = current_samp; // Data byte 0 start sample
                         if (s->half_ui_accum == 1) s->data_buf[0] |= (uint64_t)current_bit << 7;
                         break;
                     }
@@ -640,7 +640,7 @@ LABEL_109:
                     s->data_byte_idx = 0;
                     s->byte_counter = 0;
                     s->state = 9;
-                    s->ann_start_samps[1] = current_samp; // Data start sample
+                    s->ann_start_samps[9] = current_samp; // Data byte 0 start sample
                     if (s->half_ui_accum == 1) s->data_buf[0] |= (uint64_t)current_bit << 7;
                     break;
                 }

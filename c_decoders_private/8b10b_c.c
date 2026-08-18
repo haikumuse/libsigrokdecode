@@ -67,12 +67,31 @@ static void dec_start(struct srd_decoder_inst *di)
     decoder_8b10b_s *s = (decoder_8b10b_s *)c_decoder_get_private(di);
     GVariant *gvar;
 
-    gvar = g_hash_table_lookup(di->c_options, "baudrate");
-    s->baudrate = g_variant_get_int64(gvar);
-    gvar = g_hash_table_lookup(di->c_options, "polarity");
-    s->invert = strcmp(g_variant_get_string(gvar, NULL), "Inverted") == 0;
-    gvar = g_hash_table_lookup(di->c_options, "bit_order");
-    s->lsb_first = strcmp(g_variant_get_string(gvar, NULL), "lsb-first") == 0;
+    /* Options may be absent when the decoder is created without explicit
+     * options (di->c_options can be NULL). Guard every lookup and fall back
+     * to the declared defaults; otherwise g_variant_get_string(NULL) hands
+     * strcmp a garbage pointer and the process crashes. */
+    gvar = (di->c_options) ? g_hash_table_lookup(di->c_options, "baudrate") : NULL;
+    if (gvar && g_variant_is_of_type(gvar, G_VARIANT_TYPE_INT64))
+        s->baudrate = g_variant_get_int64(gvar);
+    else
+        s->baudrate = 2500000000;
+
+    gvar = (di->c_options) ? g_hash_table_lookup(di->c_options, "polarity") : NULL;
+    if (gvar && g_variant_is_of_type(gvar, G_VARIANT_TYPE_STRING)) {
+        const char *pv = g_variant_get_string(gvar, NULL);
+        s->invert = (pv && strcmp(pv, "Inverted") == 0);
+    } else {
+        s->invert = 0;
+    }
+
+    gvar = (di->c_options) ? g_hash_table_lookup(di->c_options, "bit_order") : NULL;
+    if (gvar && g_variant_is_of_type(gvar, G_VARIANT_TYPE_STRING)) {
+        const char *bv = g_variant_get_string(gvar, NULL);
+        s->lsb_first = (!bv || strcmp(bv, "lsb-first") == 0);
+    } else {
+        s->lsb_first = 1;
+    }
 
     s->samplerate = c_samplerate(di);
 

@@ -77,6 +77,8 @@ return SRD_ERR;
 
 se->session_id = ++max_session_id;
 
+srd_ann_batch_init(&se->ann_batch);
+
 g_rw_lock_writer_lock(&sessions_rwlock);
 sessions = g_slist_append(sessions, se);
 g_rw_lock_writer_unlock(&sessions_rwlock);
@@ -371,6 +373,18 @@ SRD_API int srd_session_destroy(struct srd_session *sess)
 
 	if (sess->di_list)
 		srd_inst_free_all(sess);
+
+	/*
+	 * The instance threads were joined by srd_inst_free_all(), so any
+	 * per-thread final flush (at the end of di_thread/c_di_thread) has
+	 * already run. srd_ann_batch_flush() below is a belt-and-braces
+	 * flush (normally n == 0), and must run BEFORE the batch state is
+	 * destroyed and BEFORE sess->callbacks (which hold the wrapper
+	 * callback) are freed.
+	 */
+	srd_ann_batch_flush(sess);
+	srd_ann_batch_destroy(&sess->ann_batch);
+
 	if (sess->callbacks)
 		g_slist_free_full(sess->callbacks, g_free);
 	g_free(sess);
@@ -417,6 +431,63 @@ SRD_API int srd_pd_output_callback_add(struct srd_session* sess,
 	pd_cb->cb = cb;
 	pd_cb->cb_data = cb_data;
 	sess->callbacks = g_slist_append(sess->callbacks, pd_cb);
+
+	return SRD_OK;
+}
+
+/**
+ * Register a batch annotation delivery callback (方案 E).
+ *
+ * Annotations produced by any decoder instance of the session are buffered
+ * per-session and delivered to 'cb' in fixed-size batches via a single
+ * callback invocation, with strings allocated from a per-batch arena.
+ * The internal batch wrapper is installed as the actual SRD_OUTPUT_ANN
+ * callback (prepended, so srd_pd_output_callback_find() hits it first),
+ * which lets both C and Python decoders feed the batch path unchanged.
+ *
+ * @param sess The output session in which to register the callback.
+ *             Must not be NULL.
+ * @param output_type The output type this callback will receive. Only
+ *                    SRD_OUTPUT_ANN is supported.
+ * @param cb The batch callback to call. Must not be NULL.
+ * @param cb_data Private data for the callback function. Can be NULL.
+ *
+ * @return SRD_OK upon success, a (negative) error code otherwise.
+ *
+ * @since 1.5.0
+ */
+SRD_API int srd_pd_output_callback_add_batch(struct srd_session *sess,
+	int output_type, srd_pd_output_batch_callback cb, void *cb_data)
+{
+	struct srd_pd_callback *pd_cb;
+
+	if (!sess)
+		return SRD_ERR_ARG;
+	if (!cb)
+		return SRD_ERR_ARG;
+	if (output_type != SRD_OUTPUT_ANN) {
+		srd_err("Batch callback only supports output type SRD_OUTPUT_ANN.");
+		return SRD_ERR_ARG;
+	}
+
+	sess->ann_batch.cb = cb;
+	sess->ann_batch.cb_data = cb_data;
+
+	if (!sess->ann_batch.wrapper_installed) {
+		pd_cb = g_malloc0(sizeof(struct srd_pd_callback));
+		if (pd_cb == NULL) {
+			srd_err("%s,ERROR:failed to alloc memory.", __func__);
+			return SRD_ERR;
+		}
+
+		pd_cb->output_type = SRD_OUTPUT_ANN;
+		pd_cb->cb = srd_ann_batch_callback_wrapper;
+		pd_cb->cb_data = sess;
+		/* Prepend so the batch wrapper is found first, even if the
+		 * legacy per-annotation callback is still registered. */
+		sess->callbacks = g_slist_prepend(sess->callbacks, pd_cb);
+		sess->ann_batch.wrapper_installed = 1;
+	}
 
 	return SRD_OK;
 }

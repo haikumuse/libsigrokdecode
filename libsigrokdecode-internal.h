@@ -62,6 +62,39 @@
  * struct srd_session is defined here (PRIVATE) so that the public header
  * only has a forward declaration. Frontends must use the API functions.
  */
+
+/* ---- Batch annotation delivery (方案 E) ---- */
+struct srd_ann_arena_block {
+	struct srd_ann_arena_block *next;
+	size_t used;
+	size_t cap;
+	unsigned char data[];   /* flexible array member */
+};
+
+struct srd_ann_batch_state {
+	srd_pd_output_batch_callback cb;   /* 宿主批量回调 */
+	void *cb_data;
+	struct srd_ann_item *items;        /* SRD_ANN_BATCH_MAX 容量，init 时分配一次 */
+	size_t n;
+	struct srd_ann_arena_block *arena; /* 当前批次使用的块链（flush 后入池复用） */
+	struct srd_ann_arena_block *pool;  /* 每线程/每会话持久池：跨批次复用，惰性归还 OS */
+	int wrapper_installed;             /* 批处理包装器是否已装到 sess->callbacks */
+};
+
+SRD_PRIV void srd_ann_batch_init(struct srd_ann_batch_state *st);
+SRD_PRIV void srd_ann_batch_destroy(struct srd_ann_batch_state *st);
+SRD_PRIV void *srd_ann_arena_alloc(struct srd_ann_batch_state *st, size_t n);
+SRD_PRIV char *srd_ann_arena_strdup(struct srd_ann_batch_state *st, const char *s);
+SRD_PRIV void srd_ann_batch_append_fields(struct srd_ann_batch_state *st,
+		uint64_t start, uint64_t end, int ann_class, int ann_type,
+		const struct srd_decoder *decoder,
+		const char *const *ann_text, const char *hex, long long numeric);
+SRD_PRIV void srd_ann_batch_append_item(struct srd_ann_batch_state *st,
+		const struct srd_ann_item *it);
+SRD_PRIV void srd_ann_batch_flush_state(struct srd_ann_batch_state *st);
+SRD_PRIV void srd_ann_batch_callback_wrapper(struct srd_proto_data *pdata,
+		void *cb_data);
+
 struct srd_session {
 	int session_id;
 
@@ -70,6 +103,8 @@ struct srd_session {
 
 	/* List of frontend callbacks to receive decoder output. */
 	GSList *callbacks;
+
+	struct srd_ann_batch_state ann_batch;
 };
 
 /* Custom Python types: */

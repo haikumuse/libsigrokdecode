@@ -26,6 +26,10 @@
 
 #include <glib.h>
 #include <libsigrokdecode/libsigrokdecode.h>
+/* struct srd_session (sess->di_list) and struct srd_decoder_inst internals
+ * (dec_num_channels / dec_channelmap / decoder->channels) live in the PRIVATE
+ * header; the public API only forward-declares them. */
+#include "libsigrokdecode-internal.h"
 
 /* ------------------------------------------------------------------ */
 /*  Annotation collection                                              */

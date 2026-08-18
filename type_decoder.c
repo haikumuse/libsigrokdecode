@@ -226,6 +226,173 @@ static int convert_annotation(struct srd_decoder_inst* di, PyObject* obj,
 	PyGILState_Release(gstate);
  	return SRD_ERR_PYTHON;
 }
+
+/*
+ * 方案 E batch path for SRD_OUTPUT_ANN.
+ *
+ * Reuses the parse logic of convert_annotation()/py_parse_ann_data() but
+ * copies the annotation strings into the per-session batch arena
+ * (srd_ann_arena_strdup / srd_ann_arena_alloc) instead of per-string
+ * g_strdup/g_try_new0/g_free. The resulting item is appended to the
+ * session batch via srd_ann_batch_append_item() (auto-flush on batch
+ * full). Called with the GIL held (from Decoder_put).
+ */
+static int py_put_ann_batch(struct srd_decoder_inst *di,
+	uint64_t start_sample, uint64_t end_sample, PyObject *obj)
+{
+	PyObject *py_class;
+	PyObject *list_obj;
+	PyObject *py_tmp;
+	PyObject *py_bytes;
+	PyObject *py_numobj = NULL;
+	PyObject *text_items[10];
+	struct srd_ann_batch_state *st;
+	struct srd_ann_item it;
+	char **strv;
+	char *str;
+	int ann_class;
+	gpointer ann_type_ptr;
+	int ann_size;
+	int text_num = 0;
+	int i;
+	long long lv;
+	int nstr;
+	char *up_ptr;
+	char c;
+	char hex_str_buf[DECODE_NUM_HEX_MAX_LEN];
+
+	if (!di || !di->sess)
+		return SRD_ERR_PYTHON;
+	st = &di->sess->ann_batch;
+
+	/* Should be a list of [annotation class, [string, ...]]. */
+	if (!PyList_Check(obj)) {
+		srd_err("Protocol decoder %s submitted an annotation that"
+				" is not a list",
+			di->decoder->name);
+		return SRD_ERR_PYTHON;
+	}
+
+	/* Should have 2 elements. */
+	if (PyList_Size(obj) != 2) {
+		srd_err("Protocol decoder %s submitted annotation list with "
+				"%zd elements instead of 2",
+			di->decoder->name,
+			PyList_Size(obj));
+		return SRD_ERR_PYTHON;
+	}
+
+	/* The first element is the annotation class (an integer). */
+	py_class = PyList_GetItem(obj, 0);
+	if (!PyLong_Check(py_class)) {
+		srd_err("Protocol decoder %s submitted annotation list, but "
+				"first element was not an integer.",
+			di->decoder->name);
+		return SRD_ERR_PYTHON;
+	}
+	ann_class = PyLong_AsLong(py_class);
+	if ((ann_class >= (int)g_slist_length(di->decoder->ann_types)) || ann_class < 0) {
+		srd_err("Protocol decoder %s submitted data to unregistered "
+				"annotation class %d.",
+			di->decoder->name, ann_class);
+		return SRD_ERR_PYTHON;
+	}
+	ann_type_ptr = g_slist_nth_data(di->decoder->ann_types, ann_class);
+
+	/* Second element must be a list of text/numeric items. */
+	list_obj = PyList_GetItem(obj, 1);
+	if (!PyList_Check(list_obj)) {
+		srd_err("Protocol decoder %s submitted annotation list, but "
+				"second element was not a list.",
+			di->decoder->name);
+		return SRD_ERR_PYTHON;
+	}
+	ann_size = PyList_Size(list_obj);
+	if (ann_size == 0) {
+		srd_err("Protocol decoder %s, put() param, the annotation list is empty.",
+			di->decoder->name);
+		return SRD_ERR_PYTHON;
+	}
+
+	/* Get annotation text count and numeric value. */
+	for (i = 0; i < ann_size; i++) {
+		py_tmp = PyList_GetItem(list_obj, i);
+		/* is a string */
+		if (PyUnicode_Check(py_tmp)) {
+			text_items[text_num] = py_tmp;
+			text_num++;
+		} else if (PyLong_Check(py_tmp)) {
+			py_numobj = py_tmp;
+		}
+	}
+
+	if (py_numobj == NULL && text_num == 0) {
+		srd_err("list element type must be string or numberical");
+		return SRD_ERR_PYTHON;
+	}
+
+	/* Get numeric value. */
+	hex_str_buf[0] = 0;
+	if (py_numobj != NULL) {
+		lv = PyLong_AsLongLong(py_numobj);
+		sprintf(hex_str_buf, "%02llX", lv);
+		it.numberic_value = lv;
+	} else {
+		it.numberic_value = 0;
+	}
+
+	/* Copy the annotation text lines into the batch arena. */
+	strv = NULL;
+	if (text_num > 0) {
+		strv = srd_ann_arena_alloc(st, (text_num + 1) * sizeof(char *));
+		for (i = 0; i < text_num; i++) {
+			py_bytes = PyUnicode_AsUTF8String(text_items[i]);
+			if (!py_bytes) {
+				srd_exception_catch(NULL, "Failed to obtain string item");
+				return SRD_ERR_PYTHON;
+			}
+			str = srd_ann_arena_strdup(st, PyBytes_AsString(py_bytes));
+			Py_DECREF(py_bytes);
+
+			/* check numberic field value */
+			if (str[0] == '@') {
+				nstr = strlen(str) - 1;
+				if (nstr > 0 && nstr < DECODE_NUM_HEX_MAX_LEN) {
+					strcpy(hex_str_buf, str + 1);
+					str[0] = '\n'; /* set ignore flag */
+					str[1] = 0;
+					/* convert to upper */
+					up_ptr = hex_str_buf;
+					while (*up_ptr) {
+						c = *up_ptr;
+						if (c >= 'a' && c <= 'f')
+							*up_ptr = c - 32;
+						up_ptr++;
+					}
+				} else if (nstr > 0) {
+					/* Remove the first letter. */
+					memmove(str, str + 1, strlen(str + 1) + 1);
+				}
+			}
+
+			strv[i] = str;
+		}
+		strv[text_num] = NULL;
+	}
+
+	it.start_sample = start_sample;
+	it.end_sample = end_sample;
+	it.ann_class = ann_class;
+	it.ann_type = GPOINTER_TO_INT(ann_type_ptr);
+	it.ann_text = (const char *const *)strv;
+	it.decoder = di->decoder;
+	memcpy(it.str_number_hex, hex_str_buf, DECODE_NUM_HEX_MAX_LEN);
+
+	srd_ann_batch_append_item(st, &it);
+
+	return SRD_OK;
+}
+
  static void release_binary(struct srd_proto_data_binary* pdb)
 {
 	if (!pdb)
@@ -455,6 +622,13 @@ static inline struct srd_decoder_inst* srd_inst_find_by_obj(
 	pdata.data = NULL;
  	switch (pdo->output_type) {
 	case SRD_OUTPUT_ANN:
+		if (di->sess && di->sess->ann_batch.cb) {
+			/* 方案 E 批模式：arena 直解析，消除逐注解 g_strdup/g_free */
+			if (py_put_ann_batch(di, start_sample, end_sample, py_data) != SRD_OK)
+				break;   /* 错误已由内部记录 */
+			break;
+		}
+		/* 原逐注解路径保持不变 */
 		/* Annotations are only fed to callbacks. */
 		if ((cb = srd_pd_output_callback_find(di->sess, pdo->output_type))) {
 			pdata.data = &pda;

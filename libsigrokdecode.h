@@ -618,6 +618,34 @@ SRD_API int srd_pd_output_callback_add(struct srd_session *sess,
                                        srd_pd_output_callback cb,
                                        void *cb_data);
 
+/* ---- Batch annotation delivery (方案 E) ---- */
+#define SRD_ANN_BATCH_MAX 1024
+
+struct srd_ann_item {
+    uint64_t start_sample;
+    uint64_t end_sample;
+    int ann_class;
+    int ann_type;
+    const char *const *ann_text;   /* NULL 结尾；仅在批量回调期间有效 */
+    char str_number_hex[DECODE_NUM_HEX_MAX_LEN];
+    long long numberic_value;
+    const struct srd_decoder *decoder;   /* 产生该注解的解码器（与逐注解 pdata->pdo->di->decoder 一致） */
+};
+
+struct srd_ann_batch {
+    struct srd_ann_item *items;
+    size_t n;
+};
+
+typedef void (*srd_pd_output_batch_callback)(struct srd_ann_batch *batch,
+                                             void *cb_data);
+
+SRD_API int srd_pd_output_callback_add_batch(struct srd_session *sess,
+                                             int output_type,
+                                             srd_pd_output_batch_callback cb,
+                                             void *cb_data);
+SRD_API void srd_ann_batch_flush(struct srd_session *sess);
+
 SRD_API int srd_session_end(struct srd_session *sess, char **error);
 
 /* decoder.c */
