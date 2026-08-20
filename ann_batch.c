@@ -34,6 +34,7 @@
 #include "libsigrokdecode.h"
 #include "log.h"
 #include <glib.h>
+#include <mimalloc.h>
 #include <inttypes.h>
 #include <string.h>
 
@@ -44,24 +45,19 @@
 
 SRD_PRIV void srd_ann_batch_init(struct srd_ann_batch_state *st)
 {
-	st->items = g_malloc0(SRD_ANN_BATCH_MAX * sizeof(struct srd_ann_item));
+	/* Per-session mimalloc heap: every arena block and the item array are
+	 * allocated from here, so the decode thread's annotation memory never
+	 * touches the shared process heap (no g_malloc/g_free on the hot path
+	 * and no Win32 HeapCreate — cross-platform). */
+	st->heap = mi_heap_new();
+	st->items = mi_heap_zalloc(st->heap,
+		SRD_ANN_BATCH_MAX * sizeof(struct srd_ann_item));
 	st->n = 0;
 	st->arena = NULL;
 	st->pool = NULL;
 	st->cb = NULL;
 	st->cb_data = NULL;
 	st->wrapper_installed = 0;
-}
-
-static void srd_ann_arena_free_chain(struct srd_ann_arena_block *blk)
-{
-	struct srd_ann_arena_block *next;
-
-	while (blk) {
-		next = blk->next;
-		g_free(blk);
-		blk = next;
-	}
 }
 
 SRD_PRIV void srd_ann_batch_destroy(struct srd_ann_batch_state *st)
@@ -73,21 +69,23 @@ SRD_PRIV void srd_ann_batch_destroy(struct srd_ann_batch_state *st)
 	if (st->n > 0)
 		srd_ann_batch_flush_state(st);
 
-	g_free(st->items);
+	/* Bulk teardown: mi_heap_destroy frees the items array plus every arena
+	 * block (in-flight chain AND persistent pool) in one pass — no per-block
+	 * free, entirely off the shared process heap. */
+	if (st->heap) {
+		mi_heap_destroy(st->heap);
+		st->heap = NULL;
+	}
 	st->items = NULL;
-	st->n = 0;
-
-	/* Return both the in-flight chain and the persistent pool to the OS. */
-	srd_ann_arena_free_chain(st->arena);
 	st->arena = NULL;
-	srd_ann_arena_free_chain(st->pool);
 	st->pool = NULL;
+	st->n = 0;
 }
 
 /* 8-byte aligned bump allocation from the current arena block.
  * When the current block is exhausted, first reuse a block from the
- * persistent pool (no heap interaction); only grow the pool with g_malloc
- * when the pool is empty. */
+ * persistent pool (no heap interaction); only grow the pool via the
+ * session's mimalloc heap when the pool is empty. */
 SRD_PRIV void *srd_ann_arena_alloc(struct srd_ann_batch_state *st, size_t n)
 {
 	struct srd_ann_arena_block *blk;
@@ -104,14 +102,16 @@ SRD_PRIV void *srd_ann_arena_alloc(struct srd_ann_batch_state *st, size_t n)
 			if (blk->cap < aligned) {
 				/* Oversized single allocation: drop the pooled
 				 * block and allocate a fresh, larger one. */
-				g_free(blk);
-				blk = g_malloc0(sizeof(struct srd_ann_arena_block) + cap);
+				mi_free(blk);
+				blk = mi_heap_zalloc(st->heap,
+					sizeof(struct srd_ann_arena_block) + cap);
 				blk->cap = cap;
 			}
 			blk->used = 0;
 			blk->next = NULL;
 		} else {
-			blk = g_malloc0(sizeof(struct srd_ann_arena_block) + cap);
+			blk = mi_heap_zalloc(st->heap,
+				sizeof(struct srd_ann_arena_block) + cap);
 			blk->cap = cap;
 			blk->used = 0;
 			blk->next = NULL;
@@ -200,8 +200,9 @@ SRD_PRIV void srd_ann_batch_flush_state(struct srd_ann_batch_state *st)
 
 	/* Persistent pool: move the in-flight chain into the pool for reuse
 	 * (release is deferred — only excess blocks beyond the cap are returned
-	 * to the OS here; the whole pool is freed at session destroy). This
-	 * removes the per-flush g_free from the decode hot path entirely. */
+	 * to the OS here; the whole pool is freed at session destroy via
+	 * mi_heap_destroy). This removes the per-flush free from the decode hot
+	 * path entirely. */
 	{
 		size_t pool_cnt = 0;
 
@@ -217,7 +218,7 @@ SRD_PRIV void srd_ann_batch_flush_state(struct srd_ann_batch_state *st)
 				st->pool = blk;
 				pool_cnt++;
 			} else {
-				g_free(blk);
+				mi_free(blk);
 			}
 			blk = next;
 		}

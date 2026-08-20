@@ -162,6 +162,18 @@ static int srd_inst_send_meta(struct srd_decoder_inst* di, int key,
 	/* Dispatch metadata to C or Python via vtable */
 	srd_di_ops(di)->call_metadata(di, key, data ? g_variant_get_uint64(data) : 0);
 
+	/* Check if metadata() raised an exception (e.g. SamplerateError).
+	 * py_call_metadata stores the error in di->python_proc_error.
+	 * If set, propagate it so srd_session_metadata_set / do_decode_work
+	 * can detect the failure and skip srd_session_start / srd_session_send. */
+	{
+		char *err = srd_di_ops(di)->extract_error(di);
+		if (err) {
+			srd_set_last_error_take(err);
+			return SRD_ERR_TERM_REQ;
+		}
+	}
+
 	for (l = di->next_di; l; l = l->next) {
 		next_di = l->data;
 		if ((ret = srd_inst_send_meta(next_di, key, data)) != SRD_OK)

@@ -307,6 +307,21 @@ static gpointer c_di_thread(gpointer data);
  	if (PyObject_HasAttrString(di->py_inst, "metadata")) {
 		PyObject *py_ret = PyObject_CallMethod(di->py_inst, "metadata", "lK",
 			(long)key, (unsigned long long)value);
+		if (!py_ret) {
+			/* metadata() raised an exception (e.g. SamplerateError in
+			 * adat decoder when samplerate is too low). Clear it so the
+			 * pending exception does not corrupt subsequent Python calls
+			 * in srd_session_start / srd_session_send, which would lead
+			 * to intermittent crashes in batch add/remove tests. */
+			char *err = NULL;
+			srd_exception_catch(&err, "Protocol decoder instance %s metadata()",
+				di->inst_id);
+			if (err) {
+				g_mutex_lock(&di->error_mutex);
+				di->python_proc_error = err;
+				g_mutex_unlock(&di->error_mutex);
+			}
+		}
 		Py_XDECREF(py_ret);
 	}
  	PyGILState_Release(gstate);
@@ -336,12 +351,24 @@ static gpointer c_di_thread(gpointer data);
 {
 	PyGILState_STATE gstate;
  	gstate = PyGILState_Ensure();
-	if (PyObject_HasAttrString(di->py_inst, "reset")) {
+ 	if (PyObject_HasAttrString(di->py_inst, "reset")) {
 		srd_dbg("Calling reset() of instance %s", di->inst_id);
 		PyObject *py_ret = PyObject_CallMethod(di->py_inst, "reset", NULL);
+		if (!py_ret) {
+			/* reset() raised an exception. Clear it to prevent a dangling
+			 * exception from corrupting subsequent Python calls. */
+			char *err = NULL;
+			srd_exception_catch(&err, "Protocol decoder instance %s reset()",
+				di->inst_id);
+			if (err) {
+				g_mutex_lock(&di->error_mutex);
+				di->python_proc_error = err;
+				g_mutex_unlock(&di->error_mutex);
+			}
+		}
 		Py_XDECREF(py_ret);
 	}
-	PyGILState_Release(gstate);
+ 	PyGILState_Release(gstate);
 }
  static void py_free_resources(struct srd_decoder_inst *di)
 {

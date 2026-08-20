@@ -64,6 +64,13 @@
  */
 
 /* ---- Batch annotation delivery (方案 E) ---- */
+/* mimalloc per-session heap (forward decl; ann_batch.c includes mimalloc.h).
+ * Each decode session gets its own heap so annotation arena blocks never
+ * touch the shared process heap (cross-platform, no Win32 HeapCreate). */
+#ifndef MIMALLOC_H
+typedef struct mi_heap_s mi_heap_t;
+#endif
+
 struct srd_ann_arena_block {
 	struct srd_ann_arena_block *next;
 	size_t used;
@@ -78,6 +85,7 @@ struct srd_ann_batch_state {
 	size_t n;
 	struct srd_ann_arena_block *arena; /* 当前批次使用的块链（flush 后入池复用） */
 	struct srd_ann_arena_block *pool;  /* 每线程/每会话持久池：跨批次复用，惰性归还 OS */
+	mi_heap_t *heap;                   /* mimalloc 专用堆：所有块/items 的分配源 */
 	int wrapper_installed;             /* 批处理包装器是否已装到 sess->callbacks */
 };
 
