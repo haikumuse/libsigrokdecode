@@ -187,7 +187,8 @@ static gpointer c_di_thread(gpointer data);
 }
  static void c_call_metadata(struct srd_decoder_inst *di, int key, uint64_t value)
 {
-	di->samplerate = value;
+	if (key == SRD_CONF_SAMPLERATE)
+		di->samplerate = value;
 	if (di->c_dec_inst && di->c_dec_inst->metadata)
 		di->c_dec_inst->metadata(di, key, value);
 }
@@ -309,18 +310,36 @@ static gpointer c_di_thread(gpointer data);
 			(long)key, (unsigned long long)value);
 		if (!py_ret) {
 			/* metadata() raised an exception (e.g. SamplerateError in
-			 * adat decoder when samplerate is too low). Clear it so the
-			 * pending exception does not corrupt subsequent Python calls
-			 * in srd_session_start / srd_session_send, which would lead
-			 * to intermittent crashes in batch add/remove tests. */
-			char *err = NULL;
-			srd_exception_catch(&err, "Protocol decoder instance %s metadata()",
-				di->inst_id);
-			if (err) {
-				g_mutex_lock(&di->error_mutex);
-				di->python_proc_error = err;
-				g_mutex_unlock(&di->error_mutex);
+			 * adat decoder when samplerate is too low). Fetch and clear
+			 * the exception so it does not corrupt subsequent Python calls
+			 * in srd_session_start / srd_session_send. We use PyErr_Fetch
+			 * + PyErr_Clear directly instead of srd_exception_catch to
+			 * avoid nested PyGILState_Ensure/Release (which may cause
+			 * issues with Python 3.14's GIL implementation). */
+			PyObject *etype, *evalue, *etraceback;
+			PyErr_Fetch(&etype, &evalue, &etraceback);
+			PyErr_Clear();
+			char *err_str = NULL;
+			if (evalue) {
+				PyObject *py_str = PyObject_Str(evalue);
+				if (py_str) {
+					PyObject *py_bytes = PyUnicode_AsUTF8String(py_str);
+					if (py_bytes) {
+						err_str = g_strdup(PyBytes_AsString(py_bytes));
+						Py_DECREF(py_bytes);
+					}
+					Py_DECREF(py_str);
+				}
 			}
+			Py_XDECREF(etraceback);
+			Py_XDECREF(evalue);
+			Py_XDECREF(etype);
+			if (!err_str)
+				err_str = g_strdup("metadata() raised an unknown exception");
+			srd_err("Protocol decoder instance %s metadata(): %s", di->inst_id, err_str);
+			g_mutex_lock(&di->error_mutex);
+			di->python_proc_error = err_str;
+			g_mutex_unlock(&di->error_mutex);
 		}
 		Py_XDECREF(py_ret);
 	}
@@ -355,16 +374,31 @@ static gpointer c_di_thread(gpointer data);
 		srd_dbg("Calling reset() of instance %s", di->inst_id);
 		PyObject *py_ret = PyObject_CallMethod(di->py_inst, "reset", NULL);
 		if (!py_ret) {
-			/* reset() raised an exception. Clear it to prevent a dangling
-			 * exception from corrupting subsequent Python calls. */
-			char *err = NULL;
-			srd_exception_catch(&err, "Protocol decoder instance %s reset()",
-				di->inst_id);
-			if (err) {
-				g_mutex_lock(&di->error_mutex);
-				di->python_proc_error = err;
-				g_mutex_unlock(&di->error_mutex);
+			/* reset() raised an exception. Fetch and clear it. */
+			PyObject *etype, *evalue, *etraceback;
+			PyErr_Fetch(&etype, &evalue, &etraceback);
+			PyErr_Clear();
+			char *err_str = NULL;
+			if (evalue) {
+				PyObject *py_str = PyObject_Str(evalue);
+				if (py_str) {
+					PyObject *py_bytes = PyUnicode_AsUTF8String(py_str);
+					if (py_bytes) {
+						err_str = g_strdup(PyBytes_AsString(py_bytes));
+						Py_DECREF(py_bytes);
+					}
+					Py_DECREF(py_str);
+				}
 			}
+			Py_XDECREF(etraceback);
+			Py_XDECREF(evalue);
+			Py_XDECREF(etype);
+			if (!err_str)
+				err_str = g_strdup("reset() raised an unknown exception");
+			srd_err("Protocol decoder instance %s reset(): %s", di->inst_id, err_str);
+			g_mutex_lock(&di->error_mutex);
+			di->python_proc_error = err_str;
+			g_mutex_unlock(&di->error_mutex);
 		}
 		Py_XDECREF(py_ret);
 	}

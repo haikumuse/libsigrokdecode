@@ -156,7 +156,7 @@ static int srd_inst_send_meta(struct srd_decoder_inst* di, int key,
 	struct srd_decoder_inst* next_di;
 	int ret;
 
-	if (key != SRD_CONF_SAMPLERATE)
+	if (key != SRD_CONF_SAMPLERATE && key != SRD_CONF_CAPTURE_SAMPLES)
 		return SRD_OK;
 
 	/* Dispatch metadata to C or Python via vtable */
@@ -217,7 +217,7 @@ SRD_API int srd_session_metadata_set(struct srd_session* sess, int key,
 
 	/* Hardcoded to samplerate/uint64 for now. */
 
-	if (key != SRD_CONF_SAMPLERATE) {
+	if (key != SRD_CONF_SAMPLERATE && key != SRD_CONF_CAPTURE_SAMPLES) {
 		srd_err("Unknown config key %d.", key);
 		return SRD_ERR_ARG;
 	}
