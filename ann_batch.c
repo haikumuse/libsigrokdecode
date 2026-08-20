@@ -34,9 +34,7 @@
 #include "libsigrokdecode.h"
 #include "log.h"
 #include <glib.h>
-#if !defined(__APPLE__)
 #include <mimalloc.h>
-#endif
 #include <inttypes.h>
 #include <string.h>
 
@@ -47,16 +45,6 @@
 
 SRD_PRIV void srd_ann_batch_init(struct srd_ann_batch_state *st)
 {
-#if defined(__APPLE__)
-	/* macOS: mimalloc is deliberately NOT linked into the executable — its
-	 * global malloc-zone override crashes the embedded Python 3.14 during
-	 * decoder import (libsystem malloc dispatches into the mimalloc zone and
-	 * the allocation faults). The annotation arena falls back to plain GLib
-	 * allocation here; performance impact is minor (no Windows-style heap
-	 * lock-convoy on macOS). */
-	st->heap = NULL;
-	st->items = g_malloc0(SRD_ANN_BATCH_MAX * sizeof(struct srd_ann_item));
-#else
 	/* Per-session mimalloc heap: every arena block and the item array are
 	 * allocated from here, so the decode thread's annotation memory never
 	 * touches the shared process heap (no g_malloc/g_free on the hot path
@@ -64,7 +52,6 @@ SRD_PRIV void srd_ann_batch_init(struct srd_ann_batch_state *st)
 	st->heap = mi_heap_new();
 	st->items = mi_heap_zalloc(st->heap,
 		SRD_ANN_BATCH_MAX * sizeof(struct srd_ann_item));
-#endif
 	st->n = 0;
 	st->arena = NULL;
 	st->pool = NULL;
@@ -72,19 +59,6 @@ SRD_PRIV void srd_ann_batch_init(struct srd_ann_batch_state *st)
 	st->cb_data = NULL;
 	st->wrapper_installed = 0;
 }
-
-#if defined(__APPLE__)
-static void srd_ann_arena_free_chain(struct srd_ann_arena_block *blk)
-{
-	struct srd_ann_arena_block *next;
-
-	while (blk) {
-		next = blk->next;
-		g_free(blk);
-		blk = next;
-	}
-}
-#endif
 
 SRD_PRIV void srd_ann_batch_destroy(struct srd_ann_batch_state *st)
 {
@@ -95,11 +69,6 @@ SRD_PRIV void srd_ann_batch_destroy(struct srd_ann_batch_state *st)
 	if (st->n > 0)
 		srd_ann_batch_flush_state(st);
 
-#if defined(__APPLE__)
-	g_free(st->items);
-	srd_ann_arena_free_chain(st->arena);
-	srd_ann_arena_free_chain(st->pool);
-#else
 	/* Bulk teardown: mi_heap_destroy frees the items array plus every arena
 	 * block (in-flight chain AND persistent pool) in one pass — no per-block
 	 * free, entirely off the shared process heap. */
@@ -107,7 +76,6 @@ SRD_PRIV void srd_ann_batch_destroy(struct srd_ann_batch_state *st)
 		mi_heap_destroy(st->heap);
 		st->heap = NULL;
 	}
-#endif
 	st->items = NULL;
 	st->arena = NULL;
 	st->pool = NULL;
@@ -134,25 +102,16 @@ SRD_PRIV void *srd_ann_arena_alloc(struct srd_ann_batch_state *st, size_t n)
 			if (blk->cap < aligned) {
 				/* Oversized single allocation: drop the pooled
 				 * block and allocate a fresh, larger one. */
-#if defined(__APPLE__)
-				g_free(blk);
-				blk = g_malloc0(sizeof(struct srd_ann_arena_block) + cap);
-#else
 				mi_free(blk);
 				blk = mi_heap_zalloc(st->heap,
 					sizeof(struct srd_ann_arena_block) + cap);
-#endif
 				blk->cap = cap;
 			}
 			blk->used = 0;
 			blk->next = NULL;
 		} else {
-#if defined(__APPLE__)
-			blk = g_malloc0(sizeof(struct srd_ann_arena_block) + cap);
-#else
 			blk = mi_heap_zalloc(st->heap,
 				sizeof(struct srd_ann_arena_block) + cap);
-#endif
 			blk->cap = cap;
 			blk->used = 0;
 			blk->next = NULL;
@@ -259,11 +218,7 @@ SRD_PRIV void srd_ann_batch_flush_state(struct srd_ann_batch_state *st)
 				st->pool = blk;
 				pool_cnt++;
 			} else {
-#if defined(__APPLE__)
-				g_free(blk);
-#else
 				mi_free(blk);
-#endif
 			}
 			blk = next;
 		}
