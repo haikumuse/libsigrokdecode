@@ -1502,7 +1502,7 @@ static gpointer di_thread(gpointer data)
  	srd_dbg("%s: Starting thread routine for decoder.", di->inst_id);
  	gstate = PyGILState_Ensure();
  	srd_dbg("%s: Calling decode().", di->inst_id);
-	py_res = PyObject_CallMethod(di->py_inst, "decode", NULL);
+ 	py_res = PyObject_CallMethod(di->py_inst, "decode", NULL);
 	srd_dbg("%s: decode() terminated.", di->inst_id);
 	/* 方案 E: deliver any remaining buffered annotations. */
 	if (di->sess)
@@ -1630,16 +1630,18 @@ SRD_PRIV int srd_inst_decode(struct srd_decoder_inst* di,
 	char** error)
 {
 	/* Return an error upon unusable input. */
+	/* NOTE: do NOT call srd_set_last_error() in these defensive checks. This
+	 * function runs on decode worker threads whose lifetime is managed by a
+	 * thread pool; writing the GPrivate thread-local last_error there can
+	 * double-free (see the extract_error path below for the same reason).
+	 * Callers react to the non-SRD_OK return code instead. */
 	if (!di) {
-		srd_set_last_error("empty decoder instance");
 		return SRD_ERR_ARG;
 	}
 	if (!inbuf) {
-		srd_set_last_error("NULL buffer pointer");
 		return SRD_ERR_ARG;
 	}
 	if (inbuflen == 0) {
-		srd_set_last_error("empty buffer");
 		return SRD_ERR_ARG;
 	}
 	/* Lock early to protect di->first_pos and di->abs_cur_samplenum
@@ -1689,7 +1691,14 @@ SRD_PRIV int srd_inst_decode(struct srd_decoder_inst* di,
  	/* Extract error via vtable (handles both C error_message and Python python_proc_error) */
 	char *err_msg = di_ops(di)->extract_error(di);
 	if (err_msg) {
-		srd_set_last_error(err_msg);
+		/* NOTE: do NOT call srd_set_last_error(err_msg) here. That writes to
+		 * the process-global GPrivate thread-local last_error slot. When this
+		 * runs on a decode worker thread whose lifetime is managed by a thread
+		 * pool, repeated set + thread exit (GPrivate destructor g_free) +
+		 * TLS slot reuse causes g_free(old) to hit an already-freed pointer →
+		 * heap corruption (0xC0000374) after a few add/remove cycles. The
+		 * caller (DecoderStack) handles the error via the return code / *error,
+		 * so the GPrivate write is unnecessary and harmful. */
 		if (error)
 			*error = err_msg;
 		else

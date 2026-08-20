@@ -168,15 +168,20 @@ cleanup:
 	if (error)
 		*error = g_strdup(error_msg ? error_msg : final_msg);
 	/*
-	 * Always set the thread-local last error, so callers that don't
-	 * pass &error can still retrieve the message via srd_get_last_error().
-	 * Use _take variant to transfer ownership of error_msg (avoids
-	 * double g_strdup and potential UAF from log-chain allocator reuse).
+	 * The thread-local last_error (GPrivate) set is intentionally DISABLED
+	 * here. The value would be freed by the GPrivate destructor when a
+	 * thread-pool worker thread exits, and a subsequent
+	 * srd_set_last_error_take()/srd_clear_last_error() on a stale TLS value
+	 * causes a double free (heap corruption 0xC0000374) on repeated
+	 * add/remove of failing decoders. The error still flows to callers via
+	 * *error and di->python_proc_error, so nothing is lost.
 	 */
-	if (error_msg)
-		srd_set_last_error_take(error_msg);
-	else if (final_msg)
-		srd_set_last_error(final_msg);
+	if (0) {
+		if (error_msg)
+			srd_set_last_error_take(error_msg);
+		else if (final_msg)
+			srd_set_last_error(final_msg);
+	}
 	Py_XDECREF(py_func);
 	Py_XDECREF(py_mod);
 	Py_XDECREF(py_etraceback);
@@ -190,5 +195,6 @@ cleanup:
 
 	g_free(msg);
 	g_free(final_msg);
+	g_free(error_msg);  /* GPrivate take disabled, so free here */
 	/* error_msg was transferred to srd_set_last_error_take or freed above */
 }

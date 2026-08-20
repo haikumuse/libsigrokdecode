@@ -163,13 +163,17 @@ static int srd_inst_send_meta(struct srd_decoder_inst* di, int key,
 	srd_di_ops(di)->call_metadata(di, key, data ? g_variant_get_uint64(data) : 0);
 
 	/* Check if metadata() raised an exception (e.g. SamplerateError).
-	 * py_call_metadata stores the error in di->python_proc_error.
-	 * If set, propagate it so srd_session_metadata_set / do_decode_work
-	 * can detect the failure and skip srd_session_start / srd_session_send. */
+	 * py_call_metadata stores the error in di->python_proc_error and already
+	 * logged the message via srd_err. We do NOT hand the string to the
+	 * thread-local last_error (GPrivate): that value is also freed by the
+	 * GPrivate destructor when a thread-pool worker exits, and a subsequent
+	 * srd_set_last_error_take() would then double-free it. Free the message
+	 * here and just propagate the error code so do_decode_work can skip the
+	 * decode run. */
 	{
 		char *err = srd_di_ops(di)->extract_error(di);
 		if (err) {
-			srd_set_last_error_take(err);
+			g_free(err);
 			return SRD_ERR_TERM_REQ;
 		}
 	}
