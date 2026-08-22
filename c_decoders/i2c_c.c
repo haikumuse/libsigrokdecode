@@ -628,13 +628,10 @@ static void i2c_decode(struct srd_decoder_inst *di)
 {
     i2c_s *s = (i2c_s *)c_decoder_get_private(di);
 
-    /* Emit ATK color styling annotations at start, matching Python's
-     * self.put(self.ss, self.ss, self.out_ann, [11,["color:#4edc44"]]) */
-    {
-        uint64_t init_ss = (uint64_t)-1; /* Match Python's self.ss = -1 from reset() */
-        c_put(di, init_ss, init_ss, s->out_ann, ANN_ATK_DATA, "color:#4edc44");
-        c_put(di, init_ss, init_ss, s->out_ann, ANN_ATK_RISE, "color:#4edc44");
-    }
+    /* NOTE: 不在此处发送 ATK 着色注解。旧代码用 (uint64_t)-1 充当
+     * Python self.ss=-1 哨兵，却把 UINT64_MAX 当真坐标 c_put，生成
+     * start=end=UINT64_MAX 的非法注解（i2c 数据 maxEnd 异常来源）。
+     * ATK 数据/边沿标记在真实采样点处由 handle_start/handle_data/... 发出。 */
 
     while (1) {
         int ret;
